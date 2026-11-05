@@ -46,6 +46,18 @@ Tudo o que está marcado como **[REQUISITO §N]** vem do README. Tudo o que est�
 | Observabilidade (5) | logs, métricas, health, diagnóstico | 12 |
 | Documentação (5) | `README.md` (setup e comandos), `ARCHITECTURE.md` (decisões, trade-offs, limitações) | 14 |
 
+## Decisões já fechadas (rodada 1 do grilling)
+
+- ORM: MikroORM + EntitySchema → [ADR-0001](../adr/0001-mikro-orm-with-entity-schema.md)
+- Concorrência: lock pessimista por wallet → [ADR-0002](../adr/0002-pessimistic-lock-per-wallet.md)
+- Autenticação: não implementada, `AuthGuard` no-op → [ADR-0003](../adr/0003-authentication-not-implemented.md)
+- Eventos: fila `wallet-events.fifo` → [ADR-0004](../adr/0004-integration-events-to-sqs-fifo-queue.md)
+- SQS: LocalStack.
+- Testes de integração: serviços do `docker-compose` (sem Testcontainers).
+- Testes com ≥ 3 instâncias: `Bun.spawn` de 3 processos dentro do teste. O `docker compose --scale` fica documentado para demonstração manual.
+- Documentação (README, ARCHITECTURE, ADRs, GLOSSARY) em pt-BR. Código e commits em inglês, comentários em pt-BR.
+- Commits locais. Push só quando o usuário pedir.
+
 ## Decisões do candidato (recomendações, a justificar no ARCHITECTURE.md)
 
 | Tema | Recomendação | Base no README |
@@ -114,7 +126,7 @@ README.md  ARCHITECTURE.md
 **Arquivos:** `package.json`, `tsconfig.json` (`strict: true`, `experimentalDecorators`, `emitDecoratorMetadata`), `docker-compose.yml`, `localstack/init-sqs.sh`, `src/main.ts`, `src/app.module.ts`, `src/infrastructure/persistence/mikro-orm.config.ts`.
 
 - [ ] Projeto Bun + NestJS rodando com `bun run start`.
-- [ ] Compose com `postgres` e `localstack` (SQS). O script de init cria `wager-transactions.fifo` e `wager-transactions-dlq.fifo` com `RedrivePolicy.maxReceiveCount` **[REQUISITO §10]**.
+- [ ] Compose com `postgres` e `localstack` (SQS). O script de init cria `wager-transactions.fifo`, `wager-transactions-dlq.fifo` e `wallet-events.fifo` (ADR-0004), com `RedrivePolicy.maxReceiveCount` **[REQUISITO §10]**.
 - [ ] Scripts: `test`, `test:unit`, `test:integration`, `test:concurrency`, `migration:up`, `migration:down`.
 - [ ] Verificação: `docker compose up -d && bun run start` sobe sem erro.
 
