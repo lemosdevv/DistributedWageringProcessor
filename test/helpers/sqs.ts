@@ -49,7 +49,7 @@ export async function createTestQueues(maxReceiveCount = 3, visibilityTimeout = 
 export async function sendWagerMessage(
   queueUrl: string,
   command: WagerTransactionCommand,
-  options: { messageId?: string; deduplicationId?: string; rawBody?: string } = {},
+  options: { messageId?: string; deduplicationId?: string; rawBody?: string; groupId?: string } = {},
 ): Promise<string> {
   const messageId = options.messageId ?? `msg-${Bun.randomUUIDv7()}`;
   const body =
@@ -64,7 +64,7 @@ export async function sendWagerMessage(
     new SendMessageCommand({
       QueueUrl: queueUrl,
       MessageBody: body,
-      MessageGroupId: command.walletId,
+      MessageGroupId: options.groupId ?? command.walletId,
       MessageDeduplicationId: options.deduplicationId ?? Bun.randomUUIDv7(),
     }),
   );

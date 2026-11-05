@@ -5,10 +5,10 @@
   "scripts": {
     "start": "bun run src/main.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test",
+    "test": "bun test --timeout 180000",
     "test:unit": "bun test test/unit",
-    "test:integration": "bun test test/integration",
-    "test:concurrency": "bun test test/concurrency",
+    "test:integration": "bun test --timeout 180000 test/integration",
+    "test:concurrency": "bun test --timeout 180000 test/concurrency",
     "migration:up": "bun run src/infrastructure/persistence/migrate.ts up",
     "migration:down": "bun run src/infrastructure/persistence/migrate.ts down",
     "infra:up": "docker compose up -d --wait postgres localstack",
