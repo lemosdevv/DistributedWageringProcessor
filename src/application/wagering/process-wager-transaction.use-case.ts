@@ -104,6 +104,49 @@ export class ProcessWagerTransactionUseCase {
     }
 
     const transaction = this.createTransaction(prepared, ctx, now);
+    await this.settleAndPersist(store, transaction, wallet, { isNew: true, correlationId: ctx.correlationId, causationId: ctx.inbox?.messageId }, now);
+    await this.recordInbox(store, prepared, ctx, now);
+
+    return toResult(transaction, false);
+  }
+
+  /**
+   * Reprocessa uma transação em PENDING_REFERENCE (§7.1), chamado pelo worker agendado.
+   * Devolve undefined se outra instância já a resolveu.
+   */
+  async retryPendingReference(transactionId: string, correlationId: string): Promise<WagerResult | undefined> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.transactions.run(async (store) => {
+          const snapshot = await store.findTransactionById(transactionId);
+          if (!snapshot || snapshot.status !== WagerTransactionStatus.PendingReference) {
+            return undefined;
+          }
+          // Mesma ordem de locks do fluxo principal: wallet primeiro, depois a releitura
+          const wallet = await store.findWalletForUpdate(snapshot.walletId);
+          const transaction = await store.findTransactionById(transactionId);
+          if (!wallet || !transaction || transaction.status !== WagerTransactionStatus.PendingReference) {
+            return undefined;
+          }
+          await this.settleAndPersist(store, transaction, wallet, { isNew: false, correlationId }, this.clock.now());
+          return toResult(transaction, false);
+        });
+      } catch (error) {
+        const retriable = error instanceof DuplicateWriteError || error instanceof ConcurrencyConflictError;
+        if (!retriable || attempt >= MAX_ATTEMPTS) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  private async settleAndPersist(
+    store: WageringStore,
+    transaction: WagerTransaction,
+    wallet: Wallet,
+    origin: { isNew: boolean; correlationId: string; causationId?: string },
+    now: Date,
+  ): Promise<SettlementOutcome> {
     const reference = transaction.hasReference()
       ? await store.findTransactionByExternalId(transaction.providerId, transaction.referenceExternalTransactionId!)
       : undefined;
@@ -122,15 +165,21 @@ export class ProcessWagerTransactionUseCase {
       at: now,
     });
 
-    await store.addTransaction(transaction);
+    if (origin.isNew) {
+      await store.addTransaction(transaction);
+    } else {
+      await store.updateTransaction(transaction);
+    }
     if (outcome.status === WagerTransactionStatus.Processed && outcome.ledgerEntry) {
       await store.updateWalletBalance(wallet, expectedVersion);
       await store.addLedgerEntry(outcome.ledgerEntry);
     }
-    await store.addOutboxMessages(this.eventsFor(transaction, wallet, outcome, ctx, now));
-    await this.recordInbox(store, prepared, ctx, now);
-
-    return toResult(transaction, false);
+    // Uma nova espera pela referência não gera evento: ele já foi publicado na primeira vez
+    const stillWaiting = !origin.isNew && outcome.status === WagerTransactionStatus.PendingReference;
+    if (!stillWaiting) {
+      await store.addOutboxMessages(this.eventsFor(transaction, wallet, outcome, origin, now));
+    }
+    return outcome;
   }
 
   private async findExisting(
@@ -218,13 +267,13 @@ export class ProcessWagerTransactionUseCase {
     transaction: WagerTransaction,
     wallet: Wallet,
     outcome: SettlementOutcome,
-    ctx: WagerExecutionContext,
+    origin: { correlationId: string; causationId?: string },
     now: Date,
   ): OutboxMessage[] {
     const context = (): EventContext => ({
       eventId: this.ids.next(),
-      correlationId: ctx.correlationId,
-      causationId: ctx.inbox?.messageId,
+      correlationId: origin.correlationId,
+      causationId: origin.causationId,
       occurredAt: now,
     });
 

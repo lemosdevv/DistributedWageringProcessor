@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Money } from '../../src/domain/money/money';
 import { FailureCode } from '../../src/domain/wagering/failure-code';
 import { LedgerDirection, WagerTransactionKind as Kind, WagerTransactionStatus as Status } from '../../src/domain/wagering/kinds';
-import type { WagerTransaction } from '../../src/domain/wagering/wager-transaction';
+import { MAX_REFERENCE_ATTEMPTS, type WagerTransaction } from '../../src/domain/wagering/wager-transaction';
 import { settleWagerTransaction, type SettlementInput } from '../../src/domain/wagering/wager-settlement';
 import type { Wallet } from '../../src/domain/wallet/wallet';
 import { brl, nextId, NOW, openWallet, processed, wager } from './fixtures';
@@ -202,10 +202,29 @@ describe('settleWagerTransaction', () => {
       expect(wallet.version).toBe(1);
     });
 
+    test('waits with exponential backoff and is REJECTED with REFERENCE_NOT_FOUND after the attempt limit', () => {
+      const wallet = openWallet('100.00');
+      const rollback = wager(Kind.Rollback, '10.00', { referenceExternalTransactionId: 'never-arrives' });
+      const delays: number[] = [];
+      let outcome = settle(rollback, wallet, { reference: undefined });
+
+      for (let attempt = 1; attempt <= MAX_REFERENCE_ATTEMPTS; attempt++) {
+        if (outcome.status !== Status.PendingReference) break;
+        delays.push((rollback.nextReferenceAttemptAt!.getTime() - NOW.getTime()) / 1000);
+        outcome = settle(rollback, wallet, { reference: undefined });
+      }
+
+      expect(delays).toEqual([2, 4, 8, 16, 32, 64, 128, 256, 300, 300]);
+      expect(outcome).toEqual({ status: Status.Rejected, failureCode: FailureCode.ReferenceNotFound });
+      expect(rollback.status).toBe(Status.Rejected);
+      expect(rollback.nextReferenceAttemptAt).toBeUndefined();
+      expect(wallet.version).toBe(1);
+    });
+
     test('a reference that is itself still pending keeps waiting', () => {
       const wallet = openWallet('100.00');
       const pendingRefund = wager(Kind.Refund, '10.00', { referenceExternalTransactionId: 'bet' });
-      pendingRefund.markPendingReference();
+      pendingRefund.markPendingReference(NOW);
       const rollback = wager(Kind.Rollback, '10.00', {
         referenceExternalTransactionId: pendingRefund.externalTransactionId,
       });

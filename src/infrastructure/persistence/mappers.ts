@@ -65,19 +65,32 @@ export function transactionToDomain(record: WagerTransactionRecord): WagerTransa
     processedAt: record.processedAt ?? undefined,
     resultingBalance:
       record.resultingBalanceAmount === null ? undefined : money(record.resultingBalanceAmount, record.currency),
+    referenceAttempts: record.referenceAttempts,
+    nextReferenceAttemptAt: record.nextReferenceAttemptAt ?? undefined,
   });
 }
 
 /** Campos mutáveis da transação: o que muda depois do INSERT. */
 export function transactionStateToRecord(
   transaction: WagerTransaction,
-): Pick<WagerTransactionRecord, 'status' | 'referenceTransactionId' | 'failureCode' | 'resultingBalanceAmount' | 'processedAt'> {
+): Pick<
+  WagerTransactionRecord,
+  | 'status'
+  | 'referenceTransactionId'
+  | 'failureCode'
+  | 'resultingBalanceAmount'
+  | 'processedAt'
+  | 'referenceAttempts'
+  | 'nextReferenceAttemptAt'
+> {
   return {
     status: transaction.status,
     referenceTransactionId: transaction.referenceTransactionId ?? null,
     failureCode: transaction.failureCode ?? null,
     resultingBalanceAmount: transaction.resultingBalance?.toJSON().amount ?? null,
     processedAt: transaction.processedAt ?? null,
+    referenceAttempts: transaction.referenceAttempts,
+    nextReferenceAttemptAt: transaction.nextReferenceAttemptAt ?? null,
   };
 }
 
@@ -96,8 +109,6 @@ export function transactionToRecord(transaction: WagerTransaction): WagerTransac
     amount: transaction.money.toJSON().amount,
     currency: transaction.money.currency,
     referenceExternalTransactionId: transaction.referenceExternalTransactionId ?? null,
-    referenceAttempts: 0,
-    nextReferenceAttemptAt: null,
     createdAt: transaction.createdAt,
     ...transactionStateToRecord(transaction),
   };

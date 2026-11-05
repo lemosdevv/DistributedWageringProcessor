@@ -41,8 +41,13 @@ export function settleWagerTransaction(input: SettlementInput): SettlementOutcom
 
   const rejection = findRejection(input);
   if (rejection === 'PENDING_REFERENCE') {
-    transaction.markPendingReference();
-    return { status: WagerTransactionStatus.PendingReference };
+    if (transaction.canKeepWaitingForReference()) {
+      transaction.markPendingReference(at);
+      return { status: WagerTransactionStatus.PendingReference };
+    }
+    // Limite de espera esgotado (§7.1): rejeição terminal e auditável
+    transaction.reject(FailureCode.ReferenceNotFound, at, wallet.balance);
+    return { status: WagerTransactionStatus.Rejected, failureCode: FailureCode.ReferenceNotFound };
   }
   if (rejection) {
     transaction.reject(rejection, at, wallet.balance);

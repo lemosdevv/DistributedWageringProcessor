@@ -58,7 +58,7 @@ describe('Integration events', () => {
 
   test('WagerTransactionPendingReference exposes the missing reference', () => {
     const tx = wager(Kind.Rollback, '10.00', { referenceExternalTransactionId: 'bet-42' });
-    tx.markPendingReference();
+    tx.markPendingReference(NOW);
     const event = WagerTransactionPendingReference.from(tx, ctx);
     expect(event.data.referenceExternalTransactionId).toBe('bet-42');
     expect(event.aggregateId).toBe(tx.id);

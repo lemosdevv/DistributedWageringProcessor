@@ -1,5 +1,6 @@
 import { InvalidAmountError, InvalidTransactionStateError, InvalidWagerTransactionError } from '../errors';
 import type { Money } from '../money/money';
+import { exponentialDelayMs, type BackoffPolicy } from '../shared/backoff';
 import { FailureCode } from './failure-code';
 import {
   LedgerDirection,
@@ -42,7 +43,17 @@ export interface WagerTransactionState extends WagerTransactionIdentity {
   failureCode: FailureCode | undefined;
   processedAt: Date | undefined;
   resultingBalance: Money | undefined;
+  referenceAttempts: number;
+  nextReferenceAttemptAt: Date | undefined;
 }
+
+/**
+ * Espera pela referência ausente (§7.1): até 10 reprocessamentos com backoff exponencial
+ * de base 2s e teto de 5 min (≈ 18,5 min no total). Cobre atrasos normais de entrega
+ * sem deixar a transação pendurada por horas.
+ */
+export const REFERENCE_RETRY_POLICY: BackoffPolicy = { baseMs: 2_000, capMs: 300_000 };
+export const MAX_REFERENCE_ATTEMPTS = 10;
 
 // Abertura não vem de provider: identificadores sintéticos e determinísticos por wallet
 const OPENING_PROVIDER_ID = 'internal';
@@ -75,6 +86,8 @@ export class WagerTransaction {
     private _failureCode?: FailureCode,
     private _processedAt?: Date,
     private _resultingBalance?: Money,
+    private _referenceAttempts = 0,
+    private _nextReferenceAttemptAt?: Date,
   ) {}
 
   /** Nasce em PENDING. Valida o kind e a exigência de referência. */
@@ -142,6 +155,8 @@ export class WagerTransaction {
       state.failureCode,
       state.processedAt,
       state.resultingBalance,
+      state.referenceAttempts,
+      state.nextReferenceAttemptAt,
     );
   }
 
@@ -193,11 +208,22 @@ export class WagerTransaction {
     this._referenceTransactionId = referenceTransactionId;
     this._processedAt = at;
     this._resultingBalance = resultingBalance;
+    this._nextReferenceAttemptAt = undefined;
   }
 
-  markPendingReference(): void {
+  /**
+   * Entra (ou permanece) em PENDING_REFERENCE e agenda o próximo reprocessamento.
+   * Cada permanência conta como uma tentativa consumida.
+   */
+  markPendingReference(at: Date): void {
     this.assertNotTerminal(WagerTransactionStatus.PendingReference);
+    if (this._status === WagerTransactionStatus.PendingReference) {
+      this._referenceAttempts += 1;
+    }
     this._status = WagerTransactionStatus.PendingReference;
+    this._nextReferenceAttemptAt = new Date(
+      at.getTime() + exponentialDelayMs(this._referenceAttempts + 1, REFERENCE_RETRY_POLICY),
+    );
   }
 
   reject(code: FailureCode, at: Date, resultingBalance: Money | undefined): void {
@@ -206,6 +232,7 @@ export class WagerTransaction {
     this._failureCode = code;
     this._processedAt = at;
     this._resultingBalance = resultingBalance;
+    this._nextReferenceAttemptAt = undefined;
   }
 
   fail(code: FailureCode, at: Date): void {
@@ -216,6 +243,22 @@ export class WagerTransaction {
   }
 
   // ---- consultas de domínio
+
+  get referenceAttempts(): number {
+    return this._referenceAttempts;
+  }
+
+  get nextReferenceAttemptAt(): Date | undefined {
+    return this._nextReferenceAttemptAt;
+  }
+
+  /** Ainda pode aguardar a referência, ou esta é a tentativa que esgota o limite? */
+  canKeepWaitingForReference(): boolean {
+    if (this._status !== WagerTransactionStatus.PendingReference) {
+      return true;
+    }
+    return this._referenceAttempts + 1 < MAX_REFERENCE_ATTEMPTS;
+  }
 
   isTerminal(): boolean {
     return TERMINAL_STATUSES.includes(this._status);

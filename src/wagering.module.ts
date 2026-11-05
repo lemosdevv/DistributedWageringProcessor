@@ -2,6 +2,8 @@ import type { SQSClient } from '@aws-sdk/client-sqs';
 import { Module, type DynamicModule, type Provider } from '@nestjs/common';
 import { OutboxPublisher } from './application/outbox/outbox-publisher';
 import { MikroOrmOutboxRepository } from './infrastructure/persistence/mikro-orm-outbox-repository';
+import { MikroOrmPendingReferenceRepository } from './infrastructure/persistence/mikro-orm-pending-reference-repository';
+import { PendingReferenceProcessor } from './application/wagering/pending-reference-processor';
 import { createSqsClient, resolveQueueUrl } from './infrastructure/sqs/sqs-client';
 import { SqsConsumerHost } from './infrastructure/sqs/sqs-consumer.host';
 import { SqsEventPublisher } from './infrastructure/sqs/sqs-event-publisher';
@@ -83,7 +85,7 @@ const applicationProviders: Provider[] = [
   },
   {
     provide: BackgroundWorkersHost,
-    inject: [APP_CONFIG, MikroORM, SQS_CLIENT, CLOCK, WAGERING_METRICS, STRUCTURED_LOGGER],
+    inject: [APP_CONFIG, MikroORM, SQS_CLIENT, CLOCK, WAGERING_METRICS, STRUCTURED_LOGGER, ProcessWagerTransactionUseCase],
     useFactory: async (
       config: AppConfig,
       orm: MikroORM,
@@ -91,6 +93,7 @@ const applicationProviders: Provider[] = [
       clock: Clock,
       metrics: WageringMetrics,
       logger: StructuredLogger,
+      processWager: ProcessWagerTransactionUseCase,
     ) => {
       const workers: { name: string; worker: PollingWorker }[] = [];
       if (config.ENABLE_OUTBOX_PUBLISHER) {
@@ -112,10 +115,31 @@ const applicationProviders: Provider[] = [
           ),
         });
       }
+      if (config.ENABLE_PENDING_REFERENCE_WORKER) {
+        const processor = new PendingReferenceProcessor(
+          new MikroOrmPendingReferenceRepository(orm),
+          processWager,
+          clock,
+          { batchSize: PENDING_REFERENCE_BATCH_SIZE, leaseMs: PENDING_REFERENCE_LEASE_MS },
+          metrics,
+          logger,
+        );
+        workers.push({
+          name: 'pending-reference',
+          worker: new PollingWorker(
+            async () => (await processor.processDue()) > 0,
+            { name: 'pending-reference', idleDelayMs: 1_000, errorDelayMs: 2_000 },
+            logger,
+          ),
+        });
+      }
       return new BackgroundWorkersHost(workers, logger);
     },
   },
 ];
+
+const PENDING_REFERENCE_BATCH_SIZE = 50;
+const PENDING_REFERENCE_LEASE_MS = 30_000;
 
 const OUTBOX_BATCH_SIZE = 50;
 // Folga ampla sobre o tempo de um SendMessage: se o dono morrer, outro publica em até 30s

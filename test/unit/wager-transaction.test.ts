@@ -50,8 +50,8 @@ describe('WagerTransaction', () => {
   describe('transitions', () => {
     test('PENDING → PENDING_REFERENCE → PROCESSED', () => {
       const tx = wager(Kind.Refund, '10.00', { referenceExternalTransactionId: 'bet' });
-      tx.markPendingReference();
-      tx.markPendingReference();
+      tx.markPendingReference(NOW);
+      tx.markPendingReference(NOW);
       expect(tx.status).toBe(Status.PendingReference);
       tx.markProcessed('ref-id', NOW, brl('10.00'));
       expect(tx.status).toBe(Status.Processed);
@@ -80,7 +80,7 @@ describe('WagerTransaction', () => {
         reach(tx);
         expect(tx.isTerminal()).toBe(true);
         expect(() => tx.markProcessed(undefined, NOW, brl('1.00'))).toThrow(InvalidTransactionStateError);
-        expect(() => tx.markPendingReference()).toThrow(InvalidTransactionStateError);
+        expect(() => tx.markPendingReference(NOW)).toThrow(InvalidTransactionStateError);
         expect(() => tx.reject(FailureCode.InsufficientFunds, NOW, undefined)).toThrow(InvalidTransactionStateError);
         expect(() => tx.fail(FailureCode.InvalidPayload, NOW)).toThrow(InvalidTransactionStateError);
       });
