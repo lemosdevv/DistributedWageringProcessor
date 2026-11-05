@@ -1,4 +1,7 @@
+import type { SQSClient } from '@aws-sdk/client-sqs';
 import { Module, type DynamicModule, type Provider } from '@nestjs/common';
+import { createSqsClient } from './infrastructure/sqs/sqs-client';
+import { SqsConsumerHost } from './infrastructure/sqs/sqs-consumer.host';
 import { MikroORM } from '@mikro-orm/postgresql';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { noopMetrics, WAGERING_METRICS, type WageringMetrics } from './application/ports/metrics';
@@ -20,6 +23,8 @@ import { HealthController } from './interfaces/http/health.controller';
 import { ProvidersController } from './interfaces/http/providers.controller';
 import { WageringController } from './interfaces/http/wagering.controller';
 import { WalletsController } from './interfaces/http/wallets.controller';
+
+export const SQS_CLIENT = Symbol('SQS_CLIENT');
 
 /*
  * Composição da aplicação. Use cases são classes puras (sem decorators do Nest):
@@ -59,6 +64,18 @@ const applicationProviders: Provider[] = [
     useFactory: (queries: WageringQueries) => new WageringQueryService(queries),
   },
   AuthGuard,
+  { provide: SQS_CLIENT, inject: [APP_CONFIG], useFactory: (config: AppConfig) => createSqsClient(config) },
+  {
+    provide: SqsConsumerHost,
+    inject: [SQS_CLIENT, ProcessWagerTransactionUseCase, APP_CONFIG, WAGERING_METRICS, STRUCTURED_LOGGER],
+    useFactory: (
+      sqs: SQSClient,
+      processor: ProcessWagerTransactionUseCase,
+      config: AppConfig,
+      metrics: WageringMetrics,
+      logger: StructuredLogger,
+    ) => new SqsConsumerHost(sqs, processor, config, metrics, logger),
+  },
 ];
 
 @Module({})

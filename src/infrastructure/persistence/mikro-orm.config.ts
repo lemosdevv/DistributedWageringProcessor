@@ -13,6 +13,8 @@ export function createMikroOrmConfig(databaseUrl: string) {
       // Lista explícita: migrations escritas à mão (constraints, triggers) e sem glob de arquivos
       migrationsList,
       transactional: true,
+      // Migrations são escritas à mão: o snapshot de schema do gerador não é usado
+      snapshot: false,
       allOrNothing: true,
     },
     debug: false,

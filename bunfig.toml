@@ -1,0 +1,3 @@
+[test]
+# Testes de integração falam com Postgres e LocalStack reais (long polling, backoff de visibilidade)
+timeout = 60000
