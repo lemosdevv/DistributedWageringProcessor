@@ -18,14 +18,15 @@ const REDACTED_PATHS = [
   '*.payload',
 ];
 
-export function createPinoLogger(level: string): Logger {
-  return pino({
+export function createPinoLogger(level: string, destination?: pino.DestinationStream): Logger {
+  const options: pino.LoggerOptions = {
     level,
     base: { service: 'distributed-wagering-processor', pid: process.pid },
     timestamp: pino.stdTimeFunctions.isoTime,
     redact: { paths: REDACTED_PATHS, censor: '[REDACTED]' },
     formatters: { level: (label) => ({ level: label }) },
-  });
+  };
+  return destination ? pino(options, destination) : pino(options);
 }
 
 export class PinoStructuredLogger implements StructuredLogger {

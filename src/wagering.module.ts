@@ -11,7 +11,10 @@ import { BackgroundWorkersHost } from './infrastructure/workers/background-worke
 import { PollingWorker } from './infrastructure/workers/polling-worker';
 import { MikroORM } from '@mikro-orm/postgresql';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { noopMetrics, WAGERING_METRICS, type WageringMetrics } from './application/ports/metrics';
+import { WAGERING_METRICS, type WageringMetrics } from './application/ports/metrics';
+import { PrometheusWageringMetrics } from './infrastructure/observability/prometheus-metrics';
+import { ReadinessChecker } from './infrastructure/observability/readiness';
+import { MetricsController } from './interfaces/http/metrics.controller';
 import { STRUCTURED_LOGGER, type StructuredLogger } from './application/ports/observability';
 import { CLOCK, ID_GENERATOR, systemClock, uuidV7Generator, type Clock, type IdGenerator } from './application/ports/system';
 import { WAGERING_QUERIES, type WageringQueries } from './application/ports/wagering-queries';
@@ -45,14 +48,24 @@ const applicationProviders: Provider[] = [
     inject: [APP_CONFIG],
     useFactory: (config: AppConfig) => new PinoStructuredLogger(createPinoLogger(config.LOG_LEVEL)),
   },
-  { provide: WAGERING_METRICS, useValue: noopMetrics },
+  {
+    provide: WAGERING_METRICS,
+    inject: [MikroORM],
+    useFactory: (orm: MikroORM) => new PrometheusWageringMetrics(() => outboxBacklog(orm)),
+  },
+  {
+    provide: ReadinessChecker,
+    inject: [MikroORM, SQS_CLIENT, APP_CONFIG],
+    useFactory: (orm: MikroORM, sqs: SQSClient, config: AppConfig) =>
+      new ReadinessChecker(orm, sqs, config.WAGER_TRANSACTIONS_QUEUE),
+  },
   { provide: TRANSACTION_RUNNER, inject: [MikroORM], useFactory: (orm: MikroORM) => new MikroOrmTransactionRunner(orm) },
   { provide: WAGERING_QUERIES, inject: [MikroORM], useFactory: (orm: MikroORM) => new MikroOrmWageringQueries(orm) },
   {
     provide: ProcessWagerTransactionUseCase,
-    inject: [TRANSACTION_RUNNER, CLOCK, ID_GENERATOR],
-    useFactory: (runner: TransactionRunner, clock: Clock, ids: IdGenerator) =>
-      new ProcessWagerTransactionUseCase(runner, clock, ids),
+    inject: [TRANSACTION_RUNNER, CLOCK, ID_GENERATOR, WAGERING_METRICS, STRUCTURED_LOGGER],
+    useFactory: (runner: TransactionRunner, clock: Clock, ids: IdGenerator, metrics: WageringMetrics, logger: StructuredLogger) =>
+      new ProcessWagerTransactionUseCase(runner, clock, ids, metrics, logger),
   },
   {
     provide: CreateWalletUseCase,
@@ -138,6 +151,16 @@ const applicationProviders: Provider[] = [
   },
 ];
 
+async function outboxBacklog(orm: MikroORM) {
+  const [row] = await orm.em.fork().execute<{ pending: string; oldest_age: string | null }[]>(
+    `select count(*)::text as pending,
+            extract(epoch from (now() - min(occurred_at)))::text as oldest_age
+       from outbox_messages
+      where published_at is null`,
+  );
+  return { pending: Number(row?.pending ?? 0), oldestPendingAgeSeconds: Number(row?.oldest_age ?? 0) };
+}
+
 const PENDING_REFERENCE_BATCH_SIZE = 50;
 const PENDING_REFERENCE_LEASE_MS = 30_000;
 
@@ -153,6 +176,7 @@ export class WageringModule {
       imports: [MikroOrmModule.forRoot(createMikroOrmConfig(config.DATABASE_URL))],
       controllers: [
         HealthController,
+        MetricsController,
         ...(config.ENABLE_HTTP ? [WalletsController, WageringController, ProvidersController] : []),
       ],
       providers: [{ provide: APP_CONFIG, useValue: config }, ...applicationProviders],

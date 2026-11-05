@@ -15,6 +15,8 @@ import { settleWagerTransaction, type SettlementOutcome } from '../../domain/wag
 import { WagerTransaction } from '../../domain/wagering/wager-transaction';
 import type { Wallet } from '../../domain/wallet/wallet';
 import { IdempotencyConflictError, InvalidPayloadError, WalletNotFoundError } from '../errors';
+import { noopMetrics, type WageringMetrics } from '../ports/metrics';
+import { silentLogger, type StructuredLogger } from '../ports/observability';
 import type { Clock, IdGenerator } from '../ports/system';
 import {
   ConcurrencyConflictError,
@@ -54,19 +56,53 @@ export class ProcessWagerTransactionUseCase {
     private readonly transactions: TransactionRunner,
     private readonly clock: Clock,
     private readonly ids: IdGenerator,
+    private readonly metrics: WageringMetrics = noopMetrics,
+    private readonly logger: StructuredLogger = silentLogger,
   ) {}
 
   async execute(command: WagerTransactionCommand, ctx: WagerExecutionContext): Promise<WagerResult> {
+    const startedAt = performance.now();
+    const source = ctx.inbox ? 'sqs' : 'http';
+    const logContext = {
+      correlationId: ctx.correlationId,
+      messageId: ctx.inbox?.messageId,
+      walletId: command.walletId,
+      providerId: command.providerId,
+    };
     const prepared = prepare(command);
 
     for (let attempt = 1; ; attempt++) {
       try {
-        return await this.transactions.run((store) => this.processInTransaction(store, prepared, ctx));
+        const result = await this.transactions.run((store) => this.processInTransaction(store, prepared, ctx));
+        this.metrics.processingDuration(source, (performance.now() - startedAt) / 1000);
+        if (!result.idempotentReplay) {
+          this.metrics.transactionFinished(result.status, prepared.kind, source);
+        }
+        this.logger.info(
+          {
+            ...logContext,
+            transactionId: result.transactionId,
+            kind: prepared.kind,
+            status: result.status,
+            failureCode: result.failureCode,
+            idempotentReplay: result.idempotentReplay,
+          },
+          'wager transaction handled',
+        );
+        return result;
       } catch (error) {
+        if (error instanceof IdempotencyConflictError) {
+          this.metrics.duplicateDetected('idempotency_conflict');
+          this.logger.warn(logContext, 'idempotency conflict');
+        }
         const retriable = error instanceof DuplicateWriteError || error instanceof ConcurrencyConflictError;
         if (!retriable || attempt >= MAX_ATTEMPTS) {
           throw error;
         }
+        // Outra instância venceu a corrida pela mesma wallet/key: a nova tentativa vira replay
+        this.metrics.lockConflict();
+        this.metrics.retry('wager_transaction');
+        this.logger.warn({ ...logContext, attempt, reason: error.name }, 'concurrent write detected, retrying');
       }
     }
   }
@@ -83,6 +119,7 @@ export class ProcessWagerTransactionUseCase {
       const delivered = await store.findInboxMessage(ctx.inbox.consumerName, ctx.inbox.messageId);
       if (delivered) {
         // Redelivery de mensagem já confirmada: devolve o resultado original sem novo efeito
+        this.metrics.duplicateDetected('inbox_redelivery');
         return this.replayOfDelivered(store, prepared, ctx);
       }
     }
@@ -92,7 +129,9 @@ export class ProcessWagerTransactionUseCase {
       return this.replayOf(fastReplay, store, ctx, now);
     }
 
+    const lockRequestedAt = performance.now();
     const wallet = await store.findWalletForUpdate(command.walletId);
+    this.metrics.lockWait((performance.now() - lockRequestedAt) / 1000);
     if (!wallet) {
       throw new WalletNotFoundError(command.walletId);
     }
@@ -207,6 +246,7 @@ export class ProcessWagerTransactionUseCase {
     ctx: WagerExecutionContext,
     now: Date,
   ): Promise<WagerResult> {
+    this.metrics.duplicateDetected('idempotent_replay');
     if (ctx.inbox) {
       // Mensagem nova com payload já processado (ex.: reenvio pelo provider): registra para deduplicar redeliveries
       await store.addInboxMessage(

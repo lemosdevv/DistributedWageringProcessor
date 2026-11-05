@@ -7,6 +7,8 @@ export interface WageringMetrics {
   duplicateDetected(kind: 'idempotent_replay' | 'inbox_redelivery' | 'idempotency_conflict'): void;
   retry(operation: string): void;
   lockConflict(): void;
+  /** Tempo esperando o lock da wallet: o sinal direto de hot wallet. */
+  lockWait(seconds: number): void;
   messageSentToDlq(reason: string): void;
   processingDuration(source: string, seconds: number): void;
   outboxLag(seconds: number): void;
@@ -20,6 +22,7 @@ export const noopMetrics: WageringMetrics = {
   duplicateDetected: () => {},
   retry: () => {},
   lockConflict: () => {},
+  lockWait: () => {},
   messageSentToDlq: () => {},
   processingDuration: () => {},
   outboxLag: () => {},
