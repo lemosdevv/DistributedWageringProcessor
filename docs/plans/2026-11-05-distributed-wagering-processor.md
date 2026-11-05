@@ -58,6 +58,19 @@ Tudo o que está marcado como **[REQUISITO §N]** vem do README. Tudo o que est�
 - Documentação (README, ARCHITECTURE, ADRs, GLOSSARY) em pt-BR. Código e commits em inglês, comentários em pt-BR.
 - Commits locais. Push só quando o usuário pedir.
 
+## Decisões já fechadas (rodada 2 do grilling)
+
+- IDs internos: UUID v7 via `Bun.randomUUIDv7()`, atrás da porta `IdGenerator`.
+- `Money`: `decimal.js`.
+- `failureCode`: `INVALID_PAYLOAD`, `INTERNAL_KIND_NOT_ALLOWED`, `WALLET_NOT_FOUND`, `CURRENCY_MISMATCH`, `INSUFFICIENT_FUNDS`, `REVERSAL_WOULD_OVERDRAW`, `REFERENCE_NOT_FOUND`, `REFERENCE_MISMATCH`, `REFERENCE_KIND_NOT_ALLOWED`, `REFERENCE_NOT_PROCESSED`, `ALREADY_REVERSED`, `AMOUNT_MISMATCH`, `IDEMPOTENCY_CONFLICT`. Cada um documentado como reenviar / corrigir / desistir.
+- HTTP, igual em todos os endpoints: `400` payload inválido · `409` conflito de idempotência ou wallet duplicada · `422` rejeição de negócio (`REJECTED`) · `202` `PENDING_REFERENCE` · `503` falha transitória · `404` inexistente · `200` processada/replay · `201` wallet criada. O replay de `REJECTED` devolve o mesmo `422`.
+- `PENDING_REFERENCE`: até 10 tentativas, backoff exponencial com base de 2s e teto de 5min (cerca de 20 min no total). Depois, `REJECTED` com `REFERENCE_NOT_FOUND`.
+- Consumidor SQS: visibility timeout de 30s, `maxReceiveCount = 5` antes da DLQ, backoff transitório via `ChangeMessageVisibility` (2s, 4s, 8s…).
+- Topologia: uma aplicação NestJS em que cada instância roda API, consumidor, publisher da outbox e worker de `PENDING_REFERENCE`, cada papel desligável por variável de ambiente.
+- Observabilidade: `nestjs-pino` (logs JSON com redaction) + `prom-client` em `GET /metrics`.
+- Replay: `balance_after_snapshot` gravado na Wager Transaction (inclusive LOSS e REJECTED).
+- Validação de entrada: `zod`.
+
 ## Decisões do candidato (recomendações, a justificar no ARCHITECTURE.md)
 
 | Tema | Recomendação | Base no README |
