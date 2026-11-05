@@ -71,6 +71,14 @@ Tudo o que está marcado como **[REQUISITO §N]** vem do README. Tudo o que est�
 - Replay: `balance_after_snapshot` gravado na Wager Transaction (inclusive LOSS e REJECTED).
 - Validação de entrada: `zod`.
 
+## Interpretações adicionais (levar ao ARCHITECTURE.md, §7 "qualquer interpretação deve ser documentada")
+
+- `WALLET_PLAYER_MISMATCH`: código acrescentado na Tarefa 2 para quando o `playerId` do payload não é o dono da `walletId`.
+- `LOSS` aceita valor `0.00`, porque registra resultado sem mover saldo. Os demais kinds exigem valor > 0.
+- `WIN` e `LOSS` podem referenciar opcionalmente a `BET` da rodada. `BET` não referencia nada.
+- Se a referência existe mas ainda não é terminal (`PENDING`/`PENDING_REFERENCE`), a transação também fica em `PENDING_REFERENCE`. Se a referência é `REJECTED`/`FAILED`, a rejeição é `REFERENCE_NOT_PROCESSED`.
+- `Money` nunca arredonda: entrada com mais de 2 casas é rejeitada, e as operações internas entre valores de 2 casas são exatas.
+
 ## Decisões do candidato (recomendações, a justificar no ARCHITECTURE.md)
 
 | Tema | Recomendação | Base no README |
