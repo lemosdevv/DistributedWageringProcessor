@@ -7,8 +7,9 @@ const booleanFlag = z
 
 const appConfigSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
-  DATABASE_URL: z.string().url(),
-  SQS_ENDPOINT: z.string().url().optional(),
+  // Defaults apontam para o docker-compose local, para testes e dev rodarem sem .env
+  DATABASE_URL: z.string().url().default('postgres://wagering:wagering@localhost:5433/wagering'),
+  SQS_ENDPOINT: z.string().url().optional().default('http://localhost:4566'),
   AWS_REGION: z.string().default('us-east-1'),
   WAGER_TRANSACTIONS_QUEUE: z.string().default('wager-transactions.fifo'),
   WAGER_TRANSACTIONS_DLQ: z.string().default('wager-transactions-dlq.fifo'),
