@@ -1,7 +1,12 @@
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { Module, type DynamicModule, type Provider } from '@nestjs/common';
-import { createSqsClient } from './infrastructure/sqs/sqs-client';
+import { OutboxPublisher } from './application/outbox/outbox-publisher';
+import { MikroOrmOutboxRepository } from './infrastructure/persistence/mikro-orm-outbox-repository';
+import { createSqsClient, resolveQueueUrl } from './infrastructure/sqs/sqs-client';
 import { SqsConsumerHost } from './infrastructure/sqs/sqs-consumer.host';
+import { SqsEventPublisher } from './infrastructure/sqs/sqs-event-publisher';
+import { BackgroundWorkersHost } from './infrastructure/workers/background-workers.host';
+import { PollingWorker } from './infrastructure/workers/polling-worker';
 import { MikroORM } from '@mikro-orm/postgresql';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { noopMetrics, WAGERING_METRICS, type WageringMetrics } from './application/ports/metrics';
@@ -76,7 +81,45 @@ const applicationProviders: Provider[] = [
       logger: StructuredLogger,
     ) => new SqsConsumerHost(sqs, processor, config, metrics, logger),
   },
+  {
+    provide: BackgroundWorkersHost,
+    inject: [APP_CONFIG, MikroORM, SQS_CLIENT, CLOCK, WAGERING_METRICS, STRUCTURED_LOGGER],
+    useFactory: async (
+      config: AppConfig,
+      orm: MikroORM,
+      sqs: SQSClient,
+      clock: Clock,
+      metrics: WageringMetrics,
+      logger: StructuredLogger,
+    ) => {
+      const workers: { name: string; worker: PollingWorker }[] = [];
+      if (config.ENABLE_OUTBOX_PUBLISHER) {
+        const eventsQueueUrl = await resolveQueueUrl(sqs, config.WALLET_EVENTS_QUEUE);
+        const publisher = new OutboxPublisher(
+          new MikroOrmOutboxRepository(orm),
+          new SqsEventPublisher(sqs, eventsQueueUrl),
+          clock,
+          { batchSize: OUTBOX_BATCH_SIZE, leaseMs: OUTBOX_LEASE_MS },
+          metrics,
+          logger,
+        );
+        workers.push({
+          name: 'outbox-publisher',
+          worker: new PollingWorker(
+            async () => (await publisher.publishBatch()).claimed > 0,
+            { name: 'outbox-publisher', idleDelayMs: 250, errorDelayMs: 1_000 },
+            logger,
+          ),
+        });
+      }
+      return new BackgroundWorkersHost(workers, logger);
+    },
+  },
 ];
+
+const OUTBOX_BATCH_SIZE = 50;
+// Folga ampla sobre o tempo de um SendMessage: se o dono morrer, outro publica em até 30s
+const OUTBOX_LEASE_MS = 30_000;
 
 @Module({})
 export class WageringModule {
