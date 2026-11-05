@@ -30,10 +30,12 @@ services:
       timeout: 5s
       retries: 60
 
-  app:
+  # Aplica as migrations uma vez antes de subir as instâncias
+  migrate:
     build: .
     profiles: ["app"]
-    environment:
+    command: ["bun", "run", "src/infrastructure/persistence/migrate.ts", "up"]
+    environment: &app-environment
       DATABASE_URL: postgres://wagering:wagering@postgres:5432/wagering
       SQS_ENDPOINT: http://localstack:4566
       AWS_REGION: us-east-1
@@ -42,5 +44,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # Escala horizontal: docker compose --profile app up --build --scale app=3
+  app:
+    build: .
+    profiles: ["app"]
+    environment: *app-environment
+    # Porta efêmera no host para cada réplica (ver `docker compose ps`)
+    ports:
+      - "3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       localstack:
         condition: service_healthy

@@ -71,8 +71,13 @@ export class SqsWagerConsumer {
     if (!this.running) return;
     this.running = false;
     this.receiveAbort.abort();
-    const timeout = Bun.sleep(this.options.shutdownTimeoutMs).then(() => 'timeout' as const);
+    // Timer cancelável: um sleep pendente manteria o processo vivo depois do shutdown
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<'timeout'>((resolve) => {
+      timer = setTimeout(() => resolve('timeout'), this.options.shutdownTimeoutMs);
+    });
     const finished = await Promise.race([this.loop?.then(() => 'done' as const), timeout]);
+    clearTimeout(timer);
     if (finished === 'timeout') {
       // A mensagem em andamento não foi confirmada: a visibilidade expira e o SQS a reentrega
       this.logger.warn({}, 'sqs consumer shutdown timed out with a message in flight');

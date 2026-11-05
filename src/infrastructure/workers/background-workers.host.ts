@@ -17,6 +17,8 @@ export class BackgroundWorkersHost implements OnApplicationBootstrap, BeforeAppl
   }
 
   async beforeApplicationShutdown(): Promise<void> {
+    const startedAt = performance.now();
     await Promise.all(this.workers.map(({ worker }) => worker.stop()));
+    this.logger.info({ durationMs: Math.round(performance.now() - startedAt) }, 'background workers stopped');
   }
 }

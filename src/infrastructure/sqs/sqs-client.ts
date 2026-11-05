@@ -5,6 +5,9 @@ export function createSqsClient(config: AppConfig): SQSClient {
   return new SQSClient({
     region: config.AWS_REGION,
     endpoint: config.SQS_ENDPOINT,
+    // Com endpoint explícito (LocalStack), sempre fala com ele: a QueueUrl devolvida pelo
+    // LocalStack usa um hostname que não resolve de dentro de outro container
+    useQueueUrlAsEndpoint: config.SQS_ENDPOINT === undefined,
     credentials: { accessKeyId: config.AWS_ACCESS_KEY_ID, secretAccessKey: config.AWS_SECRET_ACCESS_KEY },
   });
 }

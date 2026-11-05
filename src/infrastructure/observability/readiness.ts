@@ -12,16 +12,19 @@ export interface ReadinessReport {
 const CHECK_TIMEOUT_MS = 2_000;
 
 async function withTimeout(check: () => Promise<unknown>): Promise<DependencyStatus> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
       check(),
-      Bun.sleep(CHECK_TIMEOUT_MS).then(() => {
-        throw new Error('timeout');
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timeout')), CHECK_TIMEOUT_MS);
       }),
     ]);
     return 'up';
   } catch {
     return 'down';
+  } finally {
+    clearTimeout(timer);
   }
 }
 

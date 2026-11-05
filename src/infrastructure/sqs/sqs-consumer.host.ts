@@ -48,7 +48,9 @@ export class SqsConsumerHost implements OnApplicationBootstrap, BeforeApplicatio
 
   async beforeApplicationShutdown(signal?: string): Promise<void> {
     if (!this.consumer) return;
+    const startedAt = performance.now();
     this.logger.info({ signal }, 'stopping sqs consumer');
     await this.consumer.stop();
+    this.logger.info({ durationMs: Math.round(performance.now() - startedAt) }, 'sqs consumer stopped');
   }
 }
