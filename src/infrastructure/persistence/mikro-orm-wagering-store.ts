@@ -1,7 +1,8 @@
-import { LockMode } from '@mikro-orm/core';
+import { LockMode, UniqueConstraintViolationException } from '@mikro-orm/core';
 import type { EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import {
   ConcurrencyConflictError,
+  DuplicateWriteError,
   type TransactionRunner,
   type WageringStore,
 } from '../../application/ports/wagering-store';
@@ -123,8 +124,21 @@ export class MikroOrmWageringStore implements WageringStore {
 export class MikroOrmTransactionRunner implements TransactionRunner {
   constructor(private readonly orm: MikroORM) {}
 
-  run<T>(work: (store: WageringStore) => Promise<T>): Promise<T> {
-    // fork: cada operação tem seu próprio EntityManager (identity map isolado por requisição)
-    return this.orm.em.fork().transactional((em) => work(new MikroOrmWageringStore(em)));
+  async run<T>(work: (store: WageringStore) => Promise<T>): Promise<T> {
+    try {
+      // fork: cada operação tem seu próprio EntityManager (identity map isolado por requisição)
+      return await this.orm.em.fork().transactional((em) => work(new MikroOrmWageringStore(em)));
+    } catch (error) {
+      // Traduz a exceção do ORM para a porta: a aplicação não conhece o MikroORM
+      if (error instanceof UniqueConstraintViolationException) {
+        throw new DuplicateWriteError(constraintOf(error), error);
+      }
+      throw error;
+    }
   }
+}
+
+function constraintOf(error: UniqueConstraintViolationException): string | undefined {
+  const constraint = (error as unknown as { constraint?: unknown }).constraint;
+  return typeof constraint === 'string' ? constraint : undefined;
 }

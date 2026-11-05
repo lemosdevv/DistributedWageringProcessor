@@ -43,6 +43,17 @@ export interface TransactionRunner {
 
 export const TRANSACTION_RUNNER = Symbol('TRANSACTION_RUNNER');
 
+/**
+ * Uma constraint de unicidade do banco barrou a escrita (idempotency key, inbox,
+ * reversão única…). Outra instância venceu a corrida: repetir a operação vira replay.
+ */
+export class DuplicateWriteError extends Error {
+  constructor(public readonly constraint: string | undefined, cause: unknown) {
+    super(`Duplicate write rejected by constraint ${constraint ?? 'unknown'}`, { cause });
+    this.name = 'DuplicateWriteError';
+  }
+}
+
 /** Escrita condicionada pela version perdeu a corrida: a operação pode ser repetida. */
 export class ConcurrencyConflictError extends Error {
   constructor(walletId: string) {
