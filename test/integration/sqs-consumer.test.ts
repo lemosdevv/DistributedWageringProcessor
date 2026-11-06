@@ -178,6 +178,34 @@ describe('SqsWagerConsumer', () => {
     expect(await walletConsistency(orm, walletId)).toMatchObject({ stored: '100.00', entries: 1 });
   });
 
+  test('different FIFO groups run in parallel while each group keeps its order', async () => {
+    const order: string[] = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const observing: WagerProcessor = {
+      execute: async (command, ctx) => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await Bun.sleep(300);
+        order.push(command.externalTransactionId);
+        inFlight--;
+        return useCases.processWager.execute(command, ctx);
+      },
+    };
+    const commands = Array.from({ length: 6 }, (_, i) => wagerCommand(walletId, { externalTransactionId: `ordered-${i}` }));
+    // Grupo A: 0, 1, 2 · Grupo B: 3, 4, 5
+    for (const [i, command] of commands.entries()) {
+      await sendWagerMessage(queues.queueUrl, command, { groupId: i < 3 ? 'group-a' : 'group-b' });
+    }
+
+    const outcomes = await pollUntil(consumerWith(observing), (all) => all.length >= 6);
+    expect(outcomes.every((outcome) => outcome === MessageOutcome.Acked)).toBe(true);
+    expect(maxInFlight).toBe(2);
+    expect(order.filter((id) => ['ordered-0', 'ordered-1', 'ordered-2'].includes(id))).toEqual(['ordered-0', 'ordered-1', 'ordered-2']);
+    expect(order.filter((id) => ['ordered-3', 'ordered-4', 'ordered-5'].includes(id))).toEqual(['ordered-3', 'ordered-4', 'ordered-5']);
+    expect(await walletConsistency(orm, walletId)).toMatchObject({ stored: '0.00', rebuilt: '0.00', entries: 5 });
+  });
+
   test('SIGTERM: stop() lets the in-flight message finish and ack before returning', async () => {
     let started!: () => void;
     const inFlight = new Promise<void>((resolve) => (started = resolve));

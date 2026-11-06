@@ -96,12 +96,25 @@ export class SqsWagerConsumer {
       { abortSignal: this.receiveAbort.signal },
     );
 
-    const outcomes: MessageOutcome[] = [];
-    // Sequencial: preserva a ordem do grupo FIFO dentro do lote
+    // Grupos diferentes em paralelo; dentro de um grupo, em sequência (preserva a ordem FIFO).
+    // A disputa entre grupos pela mesma wallet continua resolvida pelo lock no banco.
+    const byGroup = new Map<string, Message[]>();
     for (const message of Messages) {
-      outcomes.push(this.running || this.loop === undefined ? await this.handle(message) : await this.release(message));
+      const group = message.Attributes?.MessageGroupId ?? '';
+      byGroup.set(group, [...(byGroup.get(group) ?? []), message]);
     }
-    return outcomes;
+
+    const outcomes = new Map<Message, MessageOutcome>();
+    await Promise.all(
+      [...byGroup.values()].map(async (groupMessages) => {
+        for (const message of groupMessages) {
+          // Durante o shutdown, mensagens que ainda não começaram voltam para a fila
+          const accepting = this.running || this.loop === undefined;
+          outcomes.set(message, accepting ? await this.handle(message) : await this.release(message));
+        }
+      }),
+    );
+    return Messages.map((message) => outcomes.get(message)!);
   }
 
   private async pollLoop(): Promise<void> {
