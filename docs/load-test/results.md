@@ -1,6 +1,6 @@
 # Resultados do teste de carga
 
-> Gerado por `bun run test:load` em 2026-11-06T00:06:22.201Z. Os números dependem da máquina; o objetivo é a metodologia e a verificação de consistência sob carga, não um alvo de RPS.
+> Gerado por `bun run test:load` em 2026-11-06T00:12:43.925Z. Os números dependem da máquina; o objetivo é a metodologia e a verificação de consistência sob carga, não um alvo de RPS.
 
 ## Ambiente
 
@@ -31,10 +31,10 @@ Gerador de carga, instâncias e containers rodam **na mesma máquina** e disputa
 
 | Métrica | Valor |
 |---|---|
-| Requisições | 5000 em 9.9 s |
-| Throughput | **505.1 req/s** |
-| Latência p50 / p95 / p99 | 77.9 ms / 250.6 ms / 356.7 ms (máx. 886.1 ms) |
-| Status | 200: 4536 · 422: 464 |
+| Requisições | 5000 em 10.5 s |
+| Throughput | **476.3 req/s** |
+| Latência p50 / p95 / p99 | 85.6 ms / 260.2 ms / 378.3 ms (máx. 789.7 ms) |
+| Status | 200: 4553 · 422: 447 |
 | Taxa de erro (5xx + falhas de rede) | **0.00%** (0) |
 
 Os 422 são rejeições de negócio esperadas (saldo insuficiente na hot wallet), não erros.
@@ -43,9 +43,9 @@ Os 422 são rejeições de negócio esperadas (saldo insuficiente na hot wallet)
 
 | Métrica | Valor |
 |---|---|
-| Mensagens | 2191 enviadas (2000 operações distintas) em 18.5 s |
-| Throughput | **108.1 operações/s** |
-| Latência envio → commit p50 / p95 / p99 | 8074.0 ms / 14967.0 ms / 15932.0 ms (máx. 16181.0 ms) |
+| Mensagens | 2223 enviadas (2000 operações distintas) em 14.1 s |
+| Throughput | **142.2 operações/s** |
+| Latência envio → commit p50 / p95 / p99 | 5699.0 ms / 11503.0 ms / 12138.0 ms (máx. 12382.0 ms) |
 | Mensagens na DLQ | 0 |
 
 ### Concorrência e duplicatas
@@ -54,17 +54,17 @@ Os 422 são rejeições de negócio esperadas (saldo insuficiente na hot wallet)
 |---|---|
 | Conflitos de concorrência (retries por corrida) | 0 |
 | Retries (todas as operações) | 0 |
-| Espera média pelo lock da wallet | 18.2 ms em 6761 aquisições |
-| Replays idempotentes detectados | 247 |
-| Reentregas barradas pela inbox | 191 |
+| Espera média pelo lock da wallet | 18.4 ms em 6731 aquisições |
+| Replays idempotentes detectados | 271 |
+| Reentregas barradas pela inbox | 223 |
 
 ### Outbox
 
 | Métrica | Valor |
 |---|---|
-| Eventos publicados | 13161 |
-| Lag p50 / p95 / p99 | 24274.0 ms / 29543.0 ms / 30061.0 ms (máx. 30249.0 ms) |
-| Tempo para drenar após o fim da carga | 22.2 s |
+| Eventos publicados | 13134 |
+| Lag p50 / p95 / p99 | 142.0 ms / 382.0 ms / 555.0 ms (máx. 1055.0 ms) |
+| Tempo para drenar após o fim da carga | 0.0 s |
 
 ### Consistência final
 
@@ -79,5 +79,5 @@ Transações por status:
 
 | Status | failureCode | Quantidade |
 |---|---|---|
-| PROCESSED | — | 6306 |
-| REJECTED | INSUFFICIENT_FUNDS | 447 |
+| PROCESSED | — | 6303 |
+| REJECTED | INSUFFICIENT_FUNDS | 426 |

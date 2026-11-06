@@ -209,7 +209,7 @@ Garantias aplicadas **no schema** (§5.9), cada uma com um teste que tenta viol�
   - **Negócio** (ex.: `INSUFFICIENT_FUNDS`): a transação já é `REJECTED` no banco, então é terminal e recebe ack.
   - **Permanente** (JSON inválido, tipo desconhecido, payload inválido, `OPENING`, wallet inexistente, conflito de idempotência): a cópia vai para a DLQ com o atributo `failureReason`, e **só depois** a mensagem é confirmada, para nada se perder se o processo cair no meio.
   - **Transitório ou inesperado:** sem ack. A visibilidade é ajustada com `ChangeMessageVisibility` em backoff exponencial (2s, 4s, 8s…, até 300s). Esgotado o `maxReceiveCount = 5` da fila, o redrive do SQS move a mensagem para a DLQ.
-- O lote é processado sequencialmente, preservando a ordem do grupo FIFO.
+- Mensagens de **grupos FIFO diferentes** do mesmo lote são processadas em paralelo; dentro de um grupo, em sequência, preservando a ordem. A disputa entre grupos pela mesma wallet continua resolvida pelo lock no banco.
 - **`SIGTERM`:** para de receber, conclui a mensagem em andamento e devolve com visibilidade 0 as que ainda não começaram, com prazo máximo de `SHUTDOWN_TIMEOUT_MS`. Testado também no Docker (`docker compose stop`): o processo sai com código 0 em menos de 1s.
 - **Worker morto depois do commit e antes do ack:** a mensagem reaparece quando a visibilidade expira, e a Inbox transforma a reentrega em replay.
 
@@ -217,9 +217,9 @@ Garantias aplicadas **no schema** (§5.9), cada uma com um teste que tenta viol�
 
 O evento é gravado na mesma transação da mudança financeira, e um worker em cada instância publica depois do commit ([outbox-publisher.ts](src/application/outbox/outbox-publisher.ts)):
 
-1. **Reserva por lease.** Um único comando reserva até 50 eventos vencidos e marca `next_attempt_at = now + 30s`: `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED) RETURNING *`. Publishers concorrentes nunca pegam o mesmo evento, e **nenhuma transação fica aberta durante a chamada de rede ao SQS**.
-2. **Publica** em `wallet-events.fifo`, com `MessageGroupId = aggregateId` e `MessageDeduplicationId = eventId`.
-3. **Marca `published_at` só depois de o SQS aceitar.** Em falha, a próxima tentativa é agendada com backoff de 1s a 60s.
+1. **Reserva por lease.** Um único comando reserva até 100 eventos vencidos e marca `next_attempt_at = now + 30s`: `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED) RETURNING *`. Publishers concorrentes nunca pegam o mesmo evento, e **nenhuma transação fica aberta durante a chamada de rede ao SQS**.
+2. **Publica** em `wallet-events.fifo` com `SendMessageBatch`, em lotes de 10 enviados em sequência, para que eventos do mesmo agregado mantenham a ordem. Cada evento leva `MessageGroupId = aggregateId` e `MessageDeduplicationId = eventId`.
+3. **Marca `published_at` só depois de o SQS aceitar**, num único `UPDATE`. Numa falha parcial do lote, só os eventos recusados têm a próxima tentativa agendada, com backoff de 1s a 60s.
 
 Se a instância morre depois do commit e antes de publicar, os eventos continuam pendentes e outra instância publica. Se morre depois de reservar, a lease expira e outra instância assume. Se morre depois de publicar e antes de marcar, o evento é publicado de novo. **A entrega é at-least-once**: o consumidor deduplica pelo `eventId` do envelope, e a deduplicação do FIFO é só otimização.
 
@@ -303,9 +303,14 @@ A lease da Outbox e a espera por referência usam um `Clock` injetado, em vez de
 - **Ledger de entrada simples.** O ledger de partidas dobradas, que o enunciado marca como diferencial opcional, não foi implementado.
 - **Configuração para AWS real.** O `SQS_ENDPOINT` tem LocalStack como padrão. Para AWS real, a configuração precisaria aceitar endpoint ausente e credenciais via IAM.
 - **`/metrics` aberto.** Assim como os health checks, o endpoint não tem autenticação; em produção ficaria restrito à rede interna.
-- **Vazão da fila.** Cada instância processa uma mensagem SQS por vez, para preservar a ordem do grupo FIFO. No teste de carga, isso limitou a fila a ~108 operações/s com 3 instâncias. Processar em paralelo as mensagens de grupos diferentes do mesmo lote é a melhoria natural.
-- **Vazão da Outbox.** Cada evento é publicado com um `SendMessage` individual, em sequência. No teste de carga, o lag chegou a ~24 s (p50) durante o pico e foi drenado 22 s depois do fim da carga, sem perda. `SendMessageBatch` e publicação concorrente entre agregados reduziriam o lag.
+- **Vazão da fila.** Cada mensagem ainda gera um `DeleteMessage` individual depois do commit. No teste de carga, a fila chegou a ~142 operações/s com 3 instâncias. Confirmar em lote (`DeleteMessageBatch`) ao fim de cada lote é o próximo passo.
 
 ### Teste de carga
 
-`bun run test:load` sobe 3 instâncias reais e falha se alguma invariante for violada. Na execução registrada, a aplicação sustentou ~505 req/s por HTTP com p99 de 357 ms e 0% de erros, com zero divergências entre saldo e ledger, zero saldos negativos e zero operações duplicadas. Ambiente, metodologia, números e análise estão em [docs/load-test/](docs/load-test/README.md).
+`bun run test:load` sobe 3 instâncias reais e falha se alguma invariante for violada. Ambiente, metodologia, números e análise estão em [docs/load-test/](docs/load-test/README.md).
+
+A primeira execução expôs dois gargalos de vazão, que foram corrigidos e medidos de novo:
+- **Outbox:** a publicação passou a ser em lotes (`SendMessageBatch`), e o lag p50 caiu de ~24 s para ~140 ms.
+- **Consumidor:** grupos FIFO diferentes do mesmo lote passaram a ser processados em paralelo, e a vazão da fila subiu de ~108 para ~142 operações/s.
+
+Nas duas execuções, o HTTP ficou entre ~480 e 500 req/s com 0% de erros, e houve zero divergências entre saldo e ledger, zero saldos negativos e zero operações duplicadas.
