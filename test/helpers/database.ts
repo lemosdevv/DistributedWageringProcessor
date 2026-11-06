@@ -5,22 +5,28 @@ const ADMIN_URL = process.env.TEST_DATABASE_ADMIN_URL ?? 'postgres://wagering:wa
 export const TEST_DATABASE_NAME = process.env.TEST_DATABASE_NAME ?? 'wagering_test';
 export const TEST_DATABASE_URL = ADMIN_URL.replace(/\/[^/]+$/, `/${TEST_DATABASE_NAME}`);
 
-/** Banco separado do de desenvolvimento: os testes podem recriar o schema à vontade. */
-async function ensureTestDatabase(): Promise<void> {
+export const databaseUrlFor = (name: string) => ADMIN_URL.replace(/\/[^/]+$/, `/${name}`);
+
+/** Bancos separados do de desenvolvimento: podem ter o schema recriado à vontade. */
+async function ensureDatabase(name: string): Promise<void> {
   const admin = await MikroORM.init(createMikroOrmConfig(ADMIN_URL));
   try {
-    const rows = await admin.em.getConnection().execute('select 1 from pg_database where datname = ?', [TEST_DATABASE_NAME]);
+    const rows = await admin.em.getConnection().execute('select 1 from pg_database where datname = ?', [name]);
     if (rows.length === 0) {
-      await admin.em.getConnection().execute(`create database "${TEST_DATABASE_NAME}"`);
+      await admin.em.getConnection().execute(`create database "${name}"`);
     }
   } finally {
     await admin.close(true);
   }
 }
 
-export async function createTestOrm(): Promise<MikroORM> {
-  await ensureTestDatabase();
-  return MikroORM.init(createMikroOrmConfig(TEST_DATABASE_URL));
+export async function createOrmFor(name: string): Promise<MikroORM> {
+  await ensureDatabase(name);
+  return MikroORM.init(createMikroOrmConfig(databaseUrlFor(name)));
+}
+
+export function createTestOrm(): Promise<MikroORM> {
+  return createOrmFor(TEST_DATABASE_NAME);
 }
 
 /**

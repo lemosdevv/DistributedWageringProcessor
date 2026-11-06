@@ -21,13 +21,18 @@ export interface InstanceQueues {
 const queueName = (url: string) => url.slice(url.lastIndexOf('/') + 1);
 
 /** Sobe um processo real da aplicação (src/main.ts) com todos os papéis ligados. */
-export async function spawnInstance(name: string, port: number, queues: InstanceQueues): Promise<AppInstance> {
+export async function spawnInstance(
+  name: string,
+  port: number,
+  queues: InstanceQueues,
+  options: { databaseUrl?: string; env?: Record<string, string> } = {},
+): Promise<AppInstance> {
   const child = Bun.spawn([process.execPath, 'run', 'src/main.ts'], {
     cwd: `${import.meta.dir}/../..`,
     env: {
       ...process.env,
       PORT: String(port),
-      DATABASE_URL: TEST_DATABASE_URL,
+      DATABASE_URL: options.databaseUrl ?? TEST_DATABASE_URL,
       WAGER_TRANSACTIONS_QUEUE: queueName(queues.wagerQueue),
       WAGER_TRANSACTIONS_DLQ: queueName(queues.wagerDlq),
       WALLET_EVENTS_QUEUE: queueName(queues.eventsQueue),
@@ -35,6 +40,7 @@ export async function spawnInstance(name: string, port: number, queues: Instance
       SQS_RETRY_BASE_SECONDS: '1',
       SQS_RETRY_MAX_SECONDS: '2',
       LOG_LEVEL: 'warn',
+      ...options.env,
     },
     stdout: 'ignore',
     stderr: 'ignore',

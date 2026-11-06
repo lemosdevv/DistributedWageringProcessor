@@ -303,4 +303,9 @@ A lease da Outbox e a espera por referência usam um `Clock` injetado, em vez de
 - **Ledger de entrada simples.** O ledger de partidas dobradas, que o enunciado marca como diferencial opcional, não foi implementado.
 - **Configuração para AWS real.** O `SQS_ENDPOINT` tem LocalStack como padrão. Para AWS real, a configuração precisaria aceitar endpoint ausente e credenciais via IAM.
 - **`/metrics` aberto.** Assim como os health checks, o endpoint não tem autenticação; em produção ficaria restrito à rede interna.
-- **Teste de carga** (`bun run test:load`), diferencial opcional, não foi implementado.
+- **Vazão da fila.** Cada instância processa uma mensagem SQS por vez, para preservar a ordem do grupo FIFO. No teste de carga, isso limitou a fila a ~108 operações/s com 3 instâncias. Processar em paralelo as mensagens de grupos diferentes do mesmo lote é a melhoria natural.
+- **Vazão da Outbox.** Cada evento é publicado com um `SendMessage` individual, em sequência. No teste de carga, o lag chegou a ~24 s (p50) durante o pico e foi drenado 22 s depois do fim da carga, sem perda. `SendMessageBatch` e publicação concorrente entre agregados reduziriam o lag.
+
+### Teste de carga
+
+`bun run test:load` sobe 3 instâncias reais e falha se alguma invariante for violada. Na execução registrada, a aplicação sustentou ~505 req/s por HTTP com p99 de 357 ms e 0% de erros, com zero divergências entre saldo e ledger, zero saldos negativos e zero operações duplicadas. Ambiente, metodologia, números e análise estão em [docs/load-test/](docs/load-test/README.md).

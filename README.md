@@ -43,6 +43,7 @@ O serviço `migrate` aplica as migrations uma vez antes das réplicas subirem. P
 | `bun run test:unit` | Só testes de unidade (não precisam de Docker) |
 | `bun run test:integration` | Integração com PostgreSQL e LocalStack reais |
 | `bun run test:concurrency` | Cenários de concorrência, incluindo 3 processos reais da aplicação |
+| `bun run test:load` | Teste de carga com 3 instâncias; grava o relatório em [docs/load-test/](docs/load-test/README.md) |
 | `bun run migration:up` / `migration:down` | Aplica / reverte as migrations |
 | `bun run infra:up` / `infra:down` | Sobe / derruba Postgres e LocalStack (`down` apaga os volumes) |
 
@@ -146,4 +147,5 @@ docs/
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): decisões, garantias, trade-offs e limitações
 - [docs/adr/](docs/adr/): registros de decisão de arquitetura
+- [docs/load-test/](docs/load-test/README.md): metodologia, resultados e análise do teste de carga
 - [GLOSSARY.md](GLOSSARY.md): linguagem do domínio
