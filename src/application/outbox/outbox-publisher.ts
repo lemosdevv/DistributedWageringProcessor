@@ -5,7 +5,7 @@ import type { Clock } from '../ports/system';
 
 export interface OutboxPublisherOptions {
   batchSize: number;
-  /** Tempo de posse de uma mensagem reivindicada; maior que o pior caso de uma publicação. */
+  /** Tempo de posse de uma mensagem reivindicada; maior que o pior caso de publicar um lote. */
   leaseMs: number;
 }
 
@@ -32,33 +32,41 @@ export class OutboxPublisher {
 
   async publishBatch(): Promise<PublishBatchResult> {
     const claimed = await this.outbox.claimDue(this.clock.now(), this.options.leaseMs, this.options.batchSize);
-    let published = 0;
-    let failed = 0;
-
-    for (const message of claimed) {
-      try {
-        await this.publisher.publish(message);
-        const now = this.clock.now();
-        message.markPublished(now);
-        await this.outbox.markPublished(message);
-        this.metrics.outboxLag((now.getTime() - message.occurredAt.getTime()) / 1000);
-        published++;
-      } catch (error) {
-        message.scheduleRetry(this.clock.now());
-        await this.outbox.saveRetry(message);
-        this.metrics.retry('outbox_publish');
-        this.logger.warn(
-          {
-            eventId: message.id,
-            eventType: message.eventType,
-            attempts: message.attempts,
-            err: error instanceof Error ? error.message : String(error),
-          },
-          'outbox publish failed, retry scheduled',
-        );
-        failed++;
-      }
+    if (claimed.length === 0) {
+      return { claimed: 0, published: 0, failed: 0 };
     }
-    return { claimed: claimed.length, published, failed };
+
+    let outcome;
+    try {
+      outcome = await this.publisher.publishAll(claimed);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      outcome = { published: [], failed: claimed.map((message) => ({ id: message.id, reason })) };
+    }
+
+    const now = this.clock.now();
+    const publishedIds = new Set(outcome.published);
+    const published = claimed.filter((message) => publishedIds.has(message.id));
+    for (const message of published) {
+      message.markPublished(now);
+      this.metrics.outboxLag((now.getTime() - message.occurredAt.getTime()) / 1000);
+    }
+    // Só marca depois de o broker aceitar: se o processo cair aqui, a lease expira e republica
+    await this.outbox.markPublished(published);
+
+    const failures = new Map(outcome.failed.map((failure) => [failure.id, failure.reason]));
+    for (const message of claimed) {
+      const reason = failures.get(message.id);
+      if (reason === undefined) continue;
+      message.scheduleRetry(now);
+      await this.outbox.saveRetry(message);
+      this.metrics.retry('outbox_publish');
+      this.logger.warn(
+        { eventId: message.id, eventType: message.eventType, attempts: message.attempts, err: reason },
+        'outbox publish failed, retry scheduled',
+      );
+    }
+
+    return { claimed: claimed.length, published: published.length, failed: failures.size };
   }
 }

@@ -54,10 +54,13 @@ export class MikroOrmOutboxRepository implements OutboxRepository {
     return rows.map(rowToDomain).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id.localeCompare(b.id));
   }
 
-  async markPublished(message: OutboxMessage): Promise<void> {
+  async markPublished(messages: readonly OutboxMessage[]): Promise<void> {
+    if (messages.length === 0) return;
+    // Ids como texto único: o driver expandiria um array em `?` como lista separada por vírgulas
     await this.orm.em.fork().execute(
-      'update outbox_messages set published_at = ?, next_attempt_at = null where id = ? and published_at is null',
-      [message.publishedAt, message.id],
+      `update outbox_messages set published_at = ?, next_attempt_at = null
+        where id = any(string_to_array(?, ',')::uuid[]) and published_at is null`,
+      [messages[0]!.publishedAt, messages.map((message) => message.id).join(',')],
     );
   }
 

@@ -106,9 +106,9 @@ describe('OutboxPublisher', () => {
     const recording = (): EventPublisher => {
       const inner = sqsPublisher();
       return {
-        publish: async (message) => {
-          claimedIds.push(message.id);
-          await inner.publish(message);
+        publishAll: async (messages) => {
+          claimedIds.push(...messages.map((message) => message.id));
+          return inner.publishAll(messages);
         },
       };
     };
@@ -162,9 +162,9 @@ describe('OutboxPublisher', () => {
     const clock: Clock = { now: () => now };
     let available = false;
     const flaky: EventPublisher = {
-      publish: async (message) => {
+      publishAll: async (messages) => {
         if (!available) throw new Error('sqs unavailable');
-        await sqsPublisher().publish(message);
+        return sqsPublisher().publishAll(messages);
       },
     };
     const publisher = publisherWith(flaky, clock);
@@ -185,9 +185,49 @@ describe('OutboxPublisher', () => {
     const repository = new MikroOrmOutboxRepository(orm);
     const [message] = await repository.claimDue(new Date(), 0, 1);
     // Publica duas vezes o mesmo evento (ex.: publicou e morreu antes do markPublished)
-    await sqsPublisher().publish(message!);
-    await sqsPublisher().publish(message!);
+    await sqsPublisher().publishAll([message!]);
+    await sqsPublisher().publishAll([message!]);
     const received = await receiveAll();
     expect(new Set(received.map((event) => event.eventId))).toEqual(new Set([message!.id]));
+  });
+
+  test('publishes in batches of 10 and keeps the per-aggregate order', async () => {
+    // 12 apostas na mesma wallet: 12 WalletBalanceChanged no mesmo agregado (a wallet)
+    await placeBets(12);
+    const result = await publisherWith(sqsPublisher(), undefined, 100).publishBatch();
+    expect(result).toMatchObject({ published: result.claimed, failed: 0 });
+
+    const received = (await receiveAll()) as unknown as { eventType: string; data: { walletVersion?: number } }[];
+    const versions = received
+      .filter((event) => event.eventType === 'WalletBalanceChanged')
+      .map((event) => event.data.walletVersion!);
+    // Abertura (version 1) e as 12 apostas (versions 2..13), na ordem em que ocorreram
+    expect(versions).toEqual(Array.from({ length: 13 }, (_, i) => i + 1));
+  });
+
+  test('a partial batch failure retries only the rejected events', async () => {
+    await placeBets(1);
+    let now = new Date();
+    const clock: Clock = { now: () => now };
+    let rejectedId: string | undefined;
+    const partiallyFailing: EventPublisher = {
+      publishAll: async (messages) => {
+        // O broker recusa uma entrada do lote; as outras são aceitas
+        rejectedId ??= messages[0]!.id;
+        const outcome = await sqsPublisher().publishAll(messages.filter((message) => message.id !== rejectedId));
+        return messages.some((message) => message.id === rejectedId)
+          ? { ...outcome, failed: [...outcome.failed, { id: rejectedId!, reason: 'InternalError' }] }
+          : outcome;
+      },
+    };
+    const publisher = publisherWith(partiallyFailing, clock);
+
+    expect(await publisher.publishBatch()).toMatchObject({ claimed: 4, published: 3, failed: 1 });
+    expect(await pendingCount()).toBe(1);
+
+    rejectedId = 'already-retried';
+    now = new Date(now.getTime() + 2_000);
+    expect(await publisher.publishBatch()).toMatchObject({ claimed: 1, published: 1 });
+    expect(await pendingCount()).toBe(0);
   });
 });

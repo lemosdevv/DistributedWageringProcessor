@@ -164,7 +164,7 @@ async function outboxBacklog(orm: MikroORM) {
 const PENDING_REFERENCE_BATCH_SIZE = 50;
 const PENDING_REFERENCE_LEASE_MS = 30_000;
 
-const OUTBOX_BATCH_SIZE = 50;
+const OUTBOX_BATCH_SIZE = 100;
 // Folga ampla sobre o tempo de um SendMessage: se o dono morrer, outro publica em até 30s
 const OUTBOX_LEASE_MS = 30_000;
 

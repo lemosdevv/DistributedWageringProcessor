@@ -7,11 +7,23 @@ export interface OutboxRepository {
    * (SKIP LOCKED), e se o dono da lease morrer, a mensagem volta a vencer sozinha.
    */
   claimDue(now: Date, leaseMs: number, limit: number): Promise<OutboxMessage[]>;
-  markPublished(message: OutboxMessage): Promise<void>;
+  /** Marca as mensagens como publicadas num único UPDATE. */
+  markPublished(messages: readonly OutboxMessage[]): Promise<void>;
   saveRetry(message: OutboxMessage): Promise<void>;
+}
+
+export interface PublishOutcome {
+  /** Ids aceitos pelo broker. */
+  published: string[];
+  /** Ids recusados, com o motivo. */
+  failed: { id: string; reason: string }[];
 }
 
 /** Destino dos eventos de integração (ADR-0004). Entrega at-least-once. */
 export interface EventPublisher {
-  publish(message: OutboxMessage): Promise<void>;
+  /**
+   * Publica em ordem. Mensagens do mesmo agregado mantêm a ordem relativa enviada;
+   * uma falha parcial é reportada por mensagem, sem derrubar as demais.
+   */
+  publishAll(messages: readonly OutboxMessage[]): Promise<PublishOutcome>;
 }
