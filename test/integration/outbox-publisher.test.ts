@@ -81,7 +81,6 @@ afterEach(async () => {
 describe('OutboxPublisher', () => {
   test('publishes committed events with the envelope and marks them published', async () => {
     await placeBets(1);
-    // Abertura (2 eventos) + aposta (2 eventos)
     expect(await pendingCount()).toBe(4);
 
     const result = await publisherWith(sqsPublisher()).publishBatch();
@@ -128,7 +127,6 @@ describe('OutboxPublisher', () => {
   });
 
   test('crash after commit and before publish: another instance publishes the events', async () => {
-    // A transação financeira commitou; o processo "morreu" antes de qualquer publicação
     await placeBets(1);
     expect(await pendingCount()).toBe(4);
 
@@ -143,14 +141,11 @@ describe('OutboxPublisher', () => {
     let now = new Date();
     const clock: Clock = { now: () => now };
 
-    // Instância A reivindica e morre antes de publicar
     const claimed = await new MikroOrmOutboxRepository(orm).claimDue(now, 30_000, 10);
     expect(claimed).toHaveLength(4);
 
-    // Dentro da lease, ninguém mais pega as mensagens
     expect((await publisherWith(sqsPublisher(), clock).publishBatch()).claimed).toBe(0);
 
-    // Lease expirada: instância B publica
     now = new Date(now.getTime() + 31_000);
     expect((await publisherWith(sqsPublisher(), clock).publishBatch()).published).toBe(4);
     expect(await pendingCount()).toBe(0);
@@ -184,7 +179,6 @@ describe('OutboxPublisher', () => {
     await placeBets(1);
     const repository = new MikroOrmOutboxRepository(orm);
     const [message] = await repository.claimDue(new Date(), 0, 1);
-    // Publica duas vezes o mesmo evento (ex.: publicou e morreu antes do markPublished)
     await sqsPublisher().publishAll([message!]);
     await sqsPublisher().publishAll([message!]);
     const received = await receiveAll();
@@ -192,7 +186,6 @@ describe('OutboxPublisher', () => {
   });
 
   test('publishes in batches of 10 and keeps the per-aggregate order', async () => {
-    // 12 apostas na mesma wallet: 12 WalletBalanceChanged no mesmo agregado (a wallet)
     await placeBets(12);
     const result = await publisherWith(sqsPublisher(), undefined, 100).publishBatch();
     expect(result).toMatchObject({ published: result.claimed, failed: 0 });
@@ -201,7 +194,6 @@ describe('OutboxPublisher', () => {
     const versions = received
       .filter((event) => event.eventType === 'WalletBalanceChanged')
       .map((event) => event.data.walletVersion!);
-    // Abertura (version 1) e as 12 apostas (versions 2..13), na ordem em que ocorreram
     expect(versions).toEqual(Array.from({ length: 13 }, (_, i) => i + 1));
   });
 
@@ -212,7 +204,6 @@ describe('OutboxPublisher', () => {
     let rejectedId: string | undefined;
     const partiallyFailing: EventPublisher = {
       publishAll: async (messages) => {
-        // O broker recusa uma entrada do lote; as outras são aceitas
         rejectedId ??= messages[0]!.id;
         const outcome = await sqsPublisher().publishAll(messages.filter((message) => message.id !== rejectedId));
         return messages.some((message) => message.id === rejectedId)

@@ -3,7 +3,6 @@ import type { Response } from 'express';
 import { WAGERING_METRICS } from '../../application/ports/metrics';
 import type { PrometheusWageringMetrics } from '../../infrastructure/observability/prometheus-metrics';
 
-/** Scrape do Prometheus; aberto como os health checks (canal operacional, sem dados de negócio). */
 @Controller('metrics')
 export class MetricsController {
   constructor(@Inject(WAGERING_METRICS) private readonly metrics: PrometheusWageringMetrics) {}

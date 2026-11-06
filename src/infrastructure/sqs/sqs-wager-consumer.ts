@@ -14,7 +14,6 @@ import type { WagerExecutionContext, WagerTransactionCommand } from '../../appli
 import { exponentialDelayMs } from '../../domain/shared/backoff';
 import { parseWagerMessage, type ParsedWagerMessage } from './wager-message';
 
-/** O mesmo use case da entrada HTTP (§10). */
 export interface WagerProcessor {
   execute(command: WagerTransactionCommand, ctx: WagerExecutionContext): Promise<WagerResult>;
 }
@@ -71,7 +70,6 @@ export class SqsWagerConsumer {
     if (!this.running) return;
     this.running = false;
     this.receiveAbort.abort();
-    // Timer cancelável: um sleep pendente manteria o processo vivo depois do shutdown
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<'timeout'>((resolve) => {
       timer = setTimeout(() => resolve('timeout'), this.options.shutdownTimeoutMs);
@@ -79,12 +77,10 @@ export class SqsWagerConsumer {
     const finished = await Promise.race([this.loop?.then(() => 'done' as const), timeout]);
     clearTimeout(timer);
     if (finished === 'timeout') {
-      // A mensagem em andamento não foi confirmada: a visibilidade expira e o SQS a reentrega
       this.logger.warn({}, 'sqs consumer shutdown timed out with a message in flight');
     }
   }
 
-  /** Um ciclo de recebimento; exposto para os testes conduzirem o consumidor passo a passo. */
   async pollOnce(): Promise<MessageOutcome[]> {
     const { Messages = [] } = await this.sqs.send(
       new ReceiveMessageCommand({
@@ -97,7 +93,6 @@ export class SqsWagerConsumer {
     );
 
     // Grupos diferentes em paralelo; dentro de um grupo, em sequência (preserva a ordem FIFO).
-    // A disputa entre grupos pela mesma wallet continua resolvida pelo lock no banco.
     const byGroup = new Map<string, Message[]>();
     for (const message of Messages) {
       const group = message.Attributes?.MessageGroupId ?? '';
@@ -108,7 +103,6 @@ export class SqsWagerConsumer {
     await Promise.all(
       [...byGroup.values()].map(async (groupMessages) => {
         for (const message of groupMessages) {
-          // Durante o shutdown, mensagens que ainda não começaram voltam para a fila
           const accepting = this.running || this.loop === undefined;
           outcomes.set(message, accepting ? await this.handle(message) : await this.release(message));
         }
@@ -123,7 +117,6 @@ export class SqsWagerConsumer {
         await this.pollOnce();
       } catch (error) {
         if (!this.running) break;
-        // SQS indisponível: espera um pouco e tenta de novo, sem derrubar o processo
         this.metrics.retry('sqs_receive');
         this.logger.warn({ err: describe(error) }, 'sqs receive failed, retrying');
         await Bun.sleep(1_000);
@@ -153,7 +146,6 @@ export class SqsWagerConsumer {
         correlationId: parsed.messageId,
         inbox: { consumerName: this.options.consumerName, messageId: parsed.messageId },
       });
-      // Commit já aconteceu dentro do use case: só agora a mensagem é confirmada
       await this.ack(message);
       this.metrics.processingDuration('sqs', (performance.now() - startedAt) / 1000);
       this.logger.info(

@@ -13,10 +13,7 @@ export interface ReconciliationReport {
   checkedEntries: number;
 }
 
-/**
- * Compara o saldo materializado com o saldo reconstruído pelo ledger (§9).
- * Divergência nunca é corrigida aqui: é logada, contada em métrica e sinalizada.
- */
+/** Divergência nunca é corrigida aqui: é logada, contada em métrica e sinalizada. */
 export class ReconcileWalletUseCase {
   constructor(
     private readonly queries: WageringQueries,
@@ -37,7 +34,6 @@ export class ReconcileWalletUseCase {
 
     if (!consistent) {
       this.metrics.reconciliationDivergence();
-      // Só valores agregados de controle; nenhum payload de transação vai para o log
       this.logger.error(
         {
           correlationId,

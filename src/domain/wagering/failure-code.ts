@@ -19,13 +19,11 @@ export enum FailureCode {
   IdempotencyConflict = 'IDEMPOTENCY_CONFLICT',
 }
 
-/** O que o provider deve fazer ao receber o código. */
 export enum ProviderAction {
   /** Pode reenviar a mesma requisição mais tarde. */
   Retry = 'RETRY',
   /** O payload precisa ser corrigido (com nova idempotency key). */
   Correct = 'CORRECT',
-  /** Situação definitiva para esta operação. */
   GiveUp = 'GIVE_UP',
 }
 

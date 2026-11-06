@@ -77,7 +77,6 @@ describe('observability', () => {
     expect(metricValue(text, 'wagering_duplicates_detected_total{kind="idempotent_replay"}')).toBe(replaysBefore + 1);
     expect(text).toContain('wagering_processing_duration_seconds_bucket');
     expect(text).toContain('wagering_wallet_lock_wait_seconds_bucket');
-    // Publisher desligado neste teste: os eventos ficam pendentes e aparecem no backlog
     expect(metricValue(text, 'wagering_outbox_pending_messages')).toBeGreaterThan(0);
     expect(text).toContain('wagering_outbox_oldest_pending_age_seconds');
     for (const name of [

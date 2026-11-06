@@ -25,7 +25,6 @@ export interface WageringStore {
   findTransactionByExternalId(providerId: string, externalTransactionId: string): Promise<WagerTransaction | undefined>;
   hasProcessedReversal(referenceTransactionId: string, kind: WagerTransactionKind): Promise<boolean>;
   addTransaction(transaction: WagerTransaction): Promise<void>;
-  /** Persiste o estado mutável (status, referência, falha, saldo observado, processedAt). */
   updateTransaction(transaction: WagerTransaction): Promise<void>;
 
   addLedgerEntry(entry: WalletLedgerEntry): Promise<void>;

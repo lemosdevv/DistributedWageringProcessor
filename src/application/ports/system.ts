@@ -11,5 +11,4 @@ export const ID_GENERATOR = Symbol('ID_GENERATOR');
 
 export const systemClock: Clock = { now: () => new Date() };
 
-/** UUID v7: ordenável no tempo, o que mantém índices e cursores estáveis. */
 export const uuidV7Generator: IdGenerator = { next: () => Bun.randomUUIDv7() };

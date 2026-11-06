@@ -1,7 +1,6 @@
 import { ConnectionException, DeadlockException, LockWaitTimeoutException } from '@mikro-orm/core';
 import { ConcurrencyConflictError, DuplicateWriteError } from '../../application/ports/wagering-store';
 
-// Códigos de rede/SQLSTATE que indicam indisponibilidade momentânea, não erro do payload
 const TRANSIENT_CODES = new Set([
   'ECONNREFUSED',
   'ECONNRESET',
@@ -26,10 +25,6 @@ const TRANSIENT_AWS_NAMES = new Set([
   'InternalError',
 ]);
 
-/**
- * Falha de infraestrutura que pode ter sucesso se repetida (banco ou fila fora do ar,
- * deadlock, corrida que esgotou as tentativas). Base para 503 na API e retry na fila.
- */
 export function isTransientInfrastructureError(error: unknown): boolean {
   for (let current: unknown = error, depth = 0; current && depth < 5; depth++) {
     if (

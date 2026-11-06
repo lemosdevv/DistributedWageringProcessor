@@ -9,7 +9,6 @@ export interface InboxMessageState extends ReceiveInboxProps {
   processedAt: Date | undefined;
 }
 
-/** Deduplicação persistente por (consumerName, messageId). */
 export class InboxMessage {
   private constructor(
     public readonly messageId: string,
@@ -36,7 +35,6 @@ export class InboxMessage {
   }
 
   markProcessed(at: Date): void {
-    // Idempotente: reprocessar uma mensagem já processada não muda o registro original
     if (!this._processedAt) {
       this._processedAt = at;
     }

@@ -36,10 +36,6 @@ import { WalletsController } from './interfaces/http/wallets.controller';
 
 export const SQS_CLIENT = Symbol('SQS_CLIENT');
 
-/*
- * Composição da aplicação. Use cases são classes puras (sem decorators do Nest):
- * são montados aqui por factories, o que mantém application/ e domain/ independentes do framework.
- */
 const applicationProviders: Provider[] = [
   { provide: CLOCK, useValue: systemClock },
   { provide: ID_GENERATOR, useValue: uuidV7Generator },
@@ -165,7 +161,6 @@ const PENDING_REFERENCE_BATCH_SIZE = 50;
 const PENDING_REFERENCE_LEASE_MS = 30_000;
 
 const OUTBOX_BATCH_SIZE = 100;
-// Folga ampla sobre o tempo de um SendMessage: se o dono morrer, outro publica em até 30s
 const OUTBOX_LEASE_MS = 30_000;
 
 @Module({})

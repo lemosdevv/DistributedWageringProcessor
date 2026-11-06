@@ -17,7 +17,6 @@ export function buildUseCases(orm: MikroORM, clock: Clock = { now: () => new Dat
 
 let sequence = 0;
 
-/** Comando de exemplo no formato do README; cada chamada gera um externalTransactionId novo. */
 export function wagerCommand(
   walletId: string,
   overrides: Partial<WagerTransactionCommand> = {},
@@ -44,7 +43,6 @@ export interface WalletConsistency {
   entries: number;
 }
 
-/** Invariante final (§13): saldo materializado == saldo reconstruído pelo ledger. */
 export async function walletConsistency(orm: MikroORM, walletId: string): Promise<WalletConsistency> {
   const [row] = await sql<{ stored: string; rebuilt: string; version: number; entries: string }>(
     orm,

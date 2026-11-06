@@ -76,7 +76,6 @@ describe('pending reference worker', () => {
     });
     expect(String(rollback.result.status)).toBe('PENDING_REFERENCE');
 
-    // Antes do vencimento, nada é reprocessado
     advance(1);
     expect(await processor.processDue()).toBe(0);
 
@@ -93,7 +92,6 @@ describe('pending reference worker', () => {
       'WagerTransactionProcessed',
     ]);
 
-    // A transação já resolvida não volta a ser reivindicada
     advance(600);
     expect(await processor.processDue()).toBe(0);
   });

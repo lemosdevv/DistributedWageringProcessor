@@ -4,16 +4,11 @@ import { MikroOrmTransactionRunner } from '../../src/infrastructure/persistence/
 import { createTestOrm, resetDatabase, sql } from '../helpers/database';
 import { buildUseCases, keyOf, wagerCommand, walletConsistency } from '../helpers/wagering';
 
-/*
- * Paralelismo real: cada chamada usa sua própria conexão do pool e sua própria
- * transação SQL; as disputas acontecem no PostgreSQL, não num mock sequencial.
- */
 let orm: MikroORM;
 let useCases: ReturnType<typeof buildUseCases>;
 
 const playerByWallet = new Map<string, string>();
 
-/** Cada wallet tem seu próprio player (no máximo uma wallet por player e moeda). */
 async function newWallet(balance: string) {
   const playerId = `player-${Bun.randomUUIDv7()}`;
   const { id } = await useCases.createWallet.execute({ playerId, initialBalance: { amount: balance, currency: 'BRL' } }, 'c');
@@ -71,7 +66,6 @@ describe('concurrency (§13)', () => {
       ),
     );
 
-    // Retries de ambas não podem duplicar o débito
     const retries = await Promise.all(
       [first, second].map((command) =>
         useCases.processWager.execute(command, { idempotencyKey: keyOf(command), correlationId: 'c' }),
@@ -96,10 +90,10 @@ describe('concurrency (§13)', () => {
     );
 
     const processed = results.filter((result) => result.status === 'PROCESSED').length;
-    // floor(1000 / 7) = 142 apostas cabem; o resto é rejeitado por saldo
-    expect(processed).toBe(142);
-    expect(results.filter((result) => result.failureCode === 'INSUFFICIENT_FUNDS')).toHaveLength(58);
-    expect(await count(`select count(*) from wallet_ledger_entries where wallet_id = ? and direction = 'DEBIT'`, [walletId])).toBe(142);
+    const affordableBets = Math.floor(1000 / 7);
+    expect(processed).toBe(affordableBets);
+    expect(results.filter((result) => result.failureCode === 'INSUFFICIENT_FUNDS')).toHaveLength(commands.length - affordableBets);
+    expect(await count(`select count(*) from wallet_ledger_entries where wallet_id = ? and direction = 'DEBIT'`, [walletId])).toBe(affordableBets);
     expect(await walletConsistency(orm, walletId)).toMatchObject({ stored: '6.00', rebuilt: '6.00', version: 143 });
   });
 
@@ -107,7 +101,6 @@ describe('concurrency (§13)', () => {
     const lockedWallet = await newWallet('100.00');
     const freeWallets = await Promise.all(Array.from({ length: 10 }, () => newWallet('100.00')));
 
-    // Segura o lock de uma wallet numa transação aberta
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
     let signalLocked!: () => void;
@@ -132,7 +125,6 @@ describe('concurrency (§13)', () => {
     await holder;
 
     expect(results.every((result) => result.status === 'PROCESSED')).toBe(true);
-    // Sem lock global: as outras wallets terminam enquanto a primeira continua bloqueada
     expect(elapsedMs).toBeLessThan(5_000);
     for (const walletId of freeWallets) {
       expect(await walletConsistency(orm, walletId)).toMatchObject({ stored: '75.00', rebuilt: '75.00' });

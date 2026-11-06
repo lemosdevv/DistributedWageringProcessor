@@ -2,15 +2,13 @@ import type { StructuredLogger } from '../../application/ports/observability';
 
 export interface PollingWorkerOptions {
   name: string;
-  /** Espera entre ciclos quando não houve trabalho. */
   idleDelayMs: number;
-  /** Espera depois de um erro (banco/fila fora do ar). */
   errorDelayMs: number;
 }
 
 /**
- * Laço de worker em background: roda `tick` até ser parado. Se o tick encontrou
- * trabalho, roda de novo imediatamente; senão, dorme. stop() espera o tick atual terminar.
+ * Se o tick encontrou trabalho, roda de novo imediatamente; senão, dorme.
+ * stop() espera o tick atual terminar.
  */
 export class PollingWorker {
   private running = false;

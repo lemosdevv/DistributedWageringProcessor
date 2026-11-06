@@ -15,7 +15,6 @@ export interface LedgerEntryState {
 
 export type CreateLedgerEntryProps = LedgerEntryState;
 
-/** Lançamento imutável: só campos readonly e nenhum método de transição. */
 export class WalletLedgerEntry {
   private constructor(
     public readonly id: string,
@@ -36,7 +35,6 @@ export class WalletLedgerEntry {
     if (entry.balanceAfter.isNegative()) {
       throw new UnbalancedLedgerEntryError('Ledger entry cannot leave a negative balance');
     }
-    // As operações abaixo também validam que as três quantias usam a mesma moeda
     if (!entry.isBalanced()) {
       throw new UnbalancedLedgerEntryError(
         `Unbalanced entry: ${entry.balanceBefore} ${entry.direction} ${entry.money} != ${entry.balanceAfter}`,
@@ -58,7 +56,6 @@ export class WalletLedgerEntry {
     );
   }
 
-  /** balanceBefore ± money === balanceAfter */
   isBalanced(): boolean {
     const expected =
       this.direction === LedgerDirection.Credit

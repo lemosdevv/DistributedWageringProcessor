@@ -11,8 +11,6 @@ const SCALE = 2;
 // Construtor isolado: não altera a configuração global do decimal.js usada por outras libs
 const MoneyDecimal = Decimal.clone({ precision: 40, rounding: Decimal.ROUND_HALF_EVEN });
 
-// Só dígitos, ponto opcional e no máximo 2 casas: barra NaN, Infinity, notação científica,
-// sinais, espaços, vírgula, hexadecimal e escala maior que 2 antes de chegar ao Decimal
 const AMOUNT_PATTERN = /^\d+(\.\d{1,2})?$/;
 const CURRENCY_PATTERN = /^[A-Z]{3}$/;
 
@@ -81,7 +79,6 @@ export class Money {
   }
 
   private formatAmount(): string {
-    // Evita "-0.00" quando um zero é negado
     return this.value.isZero() ? (0).toFixed(SCALE) : this.value.toFixed(SCALE);
   }
 

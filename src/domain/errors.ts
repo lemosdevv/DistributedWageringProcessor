@@ -1,7 +1,3 @@
-/**
- * Erros de domínio: violações de regra de negócio ou de invariantes.
- * Não carregam detalhes de transporte (HTTP/SQS); o mapeamento fica nas bordas.
- */
 export abstract class DomainError extends Error {
   abstract readonly code: string;
 
@@ -51,7 +47,6 @@ export class UnbalancedLedgerEntryError extends DomainError {
   }
 }
 
-/** Payload estruturalmente válido, mas que viola regra de criação da transação. */
 export class InvalidWagerTransactionError extends DomainError {
   readonly code: string;
 
@@ -61,10 +56,6 @@ export class InvalidWagerTransactionError extends DomainError {
   }
 }
 
-/**
- * Tentativa de transicionar uma transação já terminal. É erro de programação
- * (o fluxo nunca deveria tentar), não caminho de negócio.
- */
 export class InvalidTransactionStateError extends DomainError {
   readonly code = 'INVALID_TRANSACTION_STATE';
 

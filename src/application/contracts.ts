@@ -1,14 +1,10 @@
 import { z } from 'zod';
 import { InvalidPayloadError } from './errors';
 
-/*
- * Contratos de entrada compartilhados pela API HTTP e pela fila (§9, §10).
- * `amount` precisa ser string: um número JSON já perdeu precisão antes de chegar aqui.
- * Regras de formato do valor (escala, sinal, notação) ficam no Money.
- */
 export const nonEmptyString = z.string().trim().min(1).max(256);
 
 export const moneySchema = z.object({
+  // `amount` precisa ser string: um número JSON já perdeu precisão antes de chegar aqui.
   amount: z.string(),
   currency: z.string(),
 });

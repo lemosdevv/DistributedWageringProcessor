@@ -14,10 +14,6 @@ import type {
   WalletRecord,
 } from './records';
 
-/*
- * O banco devolve NUMERIC(20,2) como string ("100.00"), que entra direto em Money.from.
- * Valores negativos nunca chegam aqui: o schema impede (CHECK >= 0).
- */
 const money = (amount: string, currency: string) => Money.from({ amount, currency });
 
 export function walletToDomain(record: WalletRecord): Wallet {
@@ -70,7 +66,6 @@ export function transactionToDomain(record: WagerTransactionRecord): WagerTransa
   });
 }
 
-/** Campos mutáveis da transação: o que muda depois do INSERT. */
 export function transactionStateToRecord(
   transaction: WagerTransaction,
 ): Pick<

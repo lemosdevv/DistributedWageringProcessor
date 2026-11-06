@@ -1,10 +1,6 @@
 import pino, { type Logger } from 'pino';
 import type { LogContext, StructuredLogger } from '../../application/ports/observability';
 
-/*
- * Logs JSON (§12). Redaction é a segunda linha de defesa: o código já evita logar
- * payloads, mas se algum objeto com dinheiro ou corpo de requisição escapar, sai censurado.
- */
 const REDACTED_PATHS = [
   'money',
   'balance',

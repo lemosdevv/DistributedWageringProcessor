@@ -12,7 +12,6 @@ export interface OutboxMessageState {
   publishedAt: Date | undefined;
 }
 
-// Falha de publicação é quase sempre indisponibilidade do broker: tenta logo e espaça até 1 min
 export const OUTBOX_RETRY_POLICY: BackoffPolicy = { baseMs: 1_000, capMs: 60_000 };
 
 export class OutboxMessage {
@@ -28,9 +27,8 @@ export class OutboxMessage {
   ) {}
 
   static enqueue(event: IntegrationEvent<unknown>): OutboxMessage {
-    // JSON round-trip garante payload estável e serializável (sem instâncias de domínio)
-    const payload = JSON.parse(JSON.stringify(event.toJSON())) as Record<string, unknown>;
-    return new OutboxMessage(event.eventId, event.aggregateId, event.eventType, payload, event.occurredAt, 0, event.occurredAt);
+    const plainJsonPayload = JSON.parse(JSON.stringify(event.toJSON())) as Record<string, unknown>;
+    return new OutboxMessage(event.eventId, event.aggregateId, event.eventType, plainJsonPayload, event.occurredAt, 0, event.occurredAt);
   }
 
   static rehydrate(state: OutboxMessageState): OutboxMessage {
@@ -73,7 +71,6 @@ export class OutboxMessage {
     }
   }
 
-  /** Incrementa attempts e calcula o próximo nextAttemptAt (backoff exponencial). */
   scheduleRetry(now: Date, policy: BackoffPolicy = OUTBOX_RETRY_POLICY): void {
     this._attempts += 1;
     this._nextAttemptAt = new Date(now.getTime() + exponentialDelayMs(this._attempts, policy));

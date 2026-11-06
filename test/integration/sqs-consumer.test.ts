@@ -171,7 +171,6 @@ describe('SqsWagerConsumer', () => {
     await sendWagerMessage(queues.queueUrl, wagerCommand(walletId));
     const consumer = consumerWith(alwaysDown);
 
-    // maxReceiveCount = 2: duas tentativas e o SQS move a mensagem para a DLQ
     await pollUntil(consumer, () => false, 6);
     expect(await approximateCount(queues.queueUrl)).toBe(0);
     expect(await drain(queues.dlqUrl)).toHaveLength(1);
@@ -193,7 +192,6 @@ describe('SqsWagerConsumer', () => {
       },
     };
     const commands = Array.from({ length: 6 }, (_, i) => wagerCommand(walletId, { externalTransactionId: `ordered-${i}` }));
-    // Grupo A: 0, 1, 2 · Grupo B: 3, 4, 5
     for (const [i, command] of commands.entries()) {
       await sendWagerMessage(queues.queueUrl, command, { groupId: i < 3 ? 'group-a' : 'group-b' });
     }

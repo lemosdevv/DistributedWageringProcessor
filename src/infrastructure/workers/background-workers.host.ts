@@ -2,7 +2,6 @@ import type { BeforeApplicationShutdown, OnApplicationBootstrap } from '@nestjs/
 import type { StructuredLogger } from '../../application/ports/observability';
 import type { PollingWorker } from './polling-worker';
 
-/** Inicia os workers habilitados nesta instância e os para no shutdown, esperando o ciclo atual. */
 export class BackgroundWorkersHost implements OnApplicationBootstrap, BeforeApplicationShutdown {
   constructor(
     private readonly workers: readonly { name: string; worker: PollingWorker }[],

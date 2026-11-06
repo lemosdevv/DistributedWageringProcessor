@@ -7,10 +7,6 @@ import { eventually, spawnInstance, type AppInstance, type InstanceQueues } from
 import { approximateCount, createTestQueues, sendWagerMessage, testSqs, type TestQueues } from '../helpers/sqs';
 import { buildUseCases, wagerCommand, walletConsistency } from '../helpers/wagering';
 
-/*
- * Processos reais da aplicação (src/main.ts), cada um com API, consumidor SQS,
- * publisher da outbox e worker de pendências, competindo pelo mesmo banco e filas.
- */
 let orm: MikroORM;
 let useCases: ReturnType<typeof buildUseCases>;
 let wagerQueues: TestQueues;
@@ -51,12 +47,10 @@ async function publishedEventIds(): Promise<string[]> {
 async function assertFinalInvariant(expected: { balance: string; debits: number }) {
   const consistency = await walletConsistency(orm, walletId);
   expect(consistency.stored).toBe(expected.balance);
-  // Invariante final de todos os testes (§13)
   expect(consistency.rebuilt).toBe(consistency.stored);
   expect(
     await scalar(`select count(*) as value from wallet_ledger_entries where wallet_id = ? and direction = 'DEBIT'`, [walletId]),
   ).toBe(expected.debits);
-  // Nenhuma operação do provider existe duas vezes
   expect(
     await scalar(
       `select count(*) as value from (select external_transaction_id from wager_transactions
@@ -102,8 +96,6 @@ describe('multiple instances (§13)', () => {
     const viaSqs = commands.slice(0, 75);
     const viaHttp = commands.slice(75);
 
-    // SQS: cada mensagem entregue duas vezes (mesmo messageId) e em grupos distintos,
-    // para que as 3 instâncias disputem a mesma wallet ao mesmo tempo
     await Promise.all(
       viaSqs.flatMap((command, i) => {
         const messageId = `msg-${i}-${command.externalTransactionId}`;
@@ -111,7 +103,6 @@ describe('multiple instances (§13)', () => {
       }),
     );
 
-    // HTTP: cada requisição enviada duas vezes, em paralelo, para instâncias diferentes
     const httpResponses = await Promise.all(
       viaHttp.flatMap((command, i) =>
         [0, 1].map((copy) =>
@@ -127,15 +118,14 @@ describe('multiple instances (§13)', () => {
     await eventually(betCount, (count) => count === 150);
     await eventually(() => approximateCount(wagerQueues.queueUrl), (count) => count === 0);
 
-    // 1000.00 / 10.00 = 100 apostas cabem; as outras 50 são rejeitadas por saldo
-    expect(await scalar(`select count(*) as value from wager_transactions where kind = 'BET' and status = 'PROCESSED'`)).toBe(100);
+    const affordableBets = 1000 / 10;
+    expect(await scalar(`select count(*) as value from wager_transactions where kind = 'BET' and status = 'PROCESSED'`)).toBe(affordableBets);
     expect(
       await scalar(`select count(*) as value from wager_transactions where kind = 'BET' and failure_code = 'INSUFFICIENT_FUNDS'`),
-    ).toBe(50);
-    await assertFinalInvariant({ balance: '0.00', debits: 100 });
+    ).toBe(commands.length - affordableBets);
+    await assertFinalInvariant({ balance: '0.00', debits: affordableBets });
     expect(await approximateCount(wagerQueues.dlqUrl)).toBe(0);
 
-    // Três publishers concorrentes drenam a outbox; cada evento chega com eventId único
     await eventually(pendingOutbox, (pending) => pending === 0);
     const totalEvents = await scalar('select count(*) as value from outbox_messages');
     const published = await publishedEventIds();
@@ -154,8 +144,6 @@ describe('multiple instances (§13)', () => {
       commands.map((command, i) => sendWagerMessage(wagerQueues.queueUrl, command, { groupId: `crash-${i}-${Math.random()}` })),
     );
 
-    // Mata uma instância com SIGKILL no meio do processamento: mensagens dela podem
-    // ter commitado sem ack, e voltam ao SQS quando a visibilidade expira
     await eventually(betCount, (count) => count >= 15);
     await instances[0]!.kill();
     instances = [...instances.slice(1), await spawnInstance('d', 4107, queues())];
@@ -164,7 +152,6 @@ describe('multiple instances (§13)', () => {
     await eventually(() => approximateCount(wagerQueues.queueUrl), (count) => count === 0);
     await assertFinalInvariant({ balance: '100.00', debits: 90 });
 
-    // Reinício completo do serviço (§13 item 8): para tudo, sobe de novo e confere
     await Promise.all(instances.map((instance) => instance.stop()));
     instances = [await spawnInstance('restarted', 4108, queues())];
 

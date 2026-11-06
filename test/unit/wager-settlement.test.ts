@@ -22,7 +22,6 @@ function settle(
   });
 }
 
-/** Aposta já liquidada na wallet, pronta para ser referenciada. */
 function settledBet(wallet: Wallet, amount: string, externalTransactionId = nextId('bet')) {
   const bet = wager(Kind.Bet, amount, { externalTransactionId });
   settle(bet, wallet);

@@ -47,7 +47,6 @@ export function wager(
   });
 }
 
-/** Cria uma transação já PROCESSED, como se estivesse vindo do banco. */
 export function processed(transaction: WagerTransaction, balance = brl('0.00')): WagerTransaction {
   transaction.markProcessed(undefined, NOW, balance);
   return transaction;

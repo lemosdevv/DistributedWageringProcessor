@@ -1,11 +1,3 @@
-/**
- * Teste de carga (diferencial opcional do §14): `bun run test:load`.
- *
- * Sobe N instâncias reais da aplicação contra um banco próprio (`wagering_load`) e filas
- * próprias, gera carga mista por HTTP e por SQS sobre muitas wallets e uma wallet muito
- * disputada, e mede throughput, latência, erros, conflitos e outbox lag. No fim confere
- * a consistência de todas as wallets e grava o relatório em docs/load-test/results.md.
- */
 import { SendMessageBatchCommand } from '@aws-sdk/client-sqs';
 import { cpus, platform, release, totalmem } from 'node:os';
 import { mkdir } from 'node:fs/promises';
@@ -22,8 +14,6 @@ const settings = {
   wallets: Number(process.env.LOAD_WALLETS ?? 50),
 };
 const DATABASE = 'wagering_load';
-
-// ---------- utilidades estatísticas
 
 function percentile(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;
@@ -48,8 +38,6 @@ const ms = (value: number) => `${value.toFixed(1)} ms`;
 const pct = (part: number, total: number) => `${((100 * part) / Math.max(1, total)).toFixed(2)}%`;
 const randomInt = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1));
 
-// ---------- métricas Prometheus das instâncias
-
 async function scrapeTotals(instances: AppInstance[]) {
   const totals = new Map<string, number>();
   for (const instance of instances) {
@@ -73,8 +61,6 @@ async function scrapeTotals(instances: AppInstance[]) {
   };
 }
 
-// ---------- execução
-
 async function main(): Promise<void> {
   const orm = await createOrmFor(DATABASE);
   await resetDatabase(orm);
@@ -97,7 +83,6 @@ async function main(): Promise<void> {
       )),
     );
 
-    // Wallets: muitas com saldo folgado e uma "hot wallet" com saldo curto (disputa + rejeições)
     const useCases = buildUseCases(orm);
     const wallets: { id: string; playerId: string }[] = [];
     for (let i = 0; i < settings.wallets; i++) {
@@ -126,8 +111,6 @@ async function main(): Promise<void> {
       money: { amount, currency: 'BRL' },
     });
 
-    // ---------- fase 1: HTTP
-    // Mix: 75% BET em wallet aleatória, 10% WIN, 10% BET na hot wallet, 5% reenvio idêntico (replay)
     const httpPlan: ReturnType<typeof operation>[] = [];
     for (let i = 0; i < settings.httpRequests; i++) {
       const roll = Math.random();
@@ -175,8 +158,6 @@ async function main(): Promise<void> {
     );
     const httpSeconds = (performance.now() - httpStartedAt) / 1000;
 
-    // ---------- fase 2: SQS
-    // Mensagens agrupadas por wallet (como um provedor real faria); 10% reentregues com o mesmo messageId
     console.log(`[load] sqs phase: ${settings.sqsMessages} messages`);
     const sentAt = new Map<string, number>();
     const entries = Array.from({ length: settings.sqsMessages }, () => {
@@ -226,7 +207,6 @@ async function main(): Promise<void> {
     );
     const sqsLatencies = sqsRows.map((row) => new Date(row.created_at).getTime() - sentAt.get(row.external_transaction_id)!);
 
-    // ---------- fase 3: outbox
     const drainStartedAt = performance.now();
     await eventually(
       async () => Number((await sql<{ count: string }>(orm, 'select count(*) from outbox_messages where published_at is null'))[0]?.count),
@@ -241,7 +221,6 @@ async function main(): Promise<void> {
       )
     ).map((row) => Number(row.lag_ms));
 
-    // ---------- consistência e métricas
     const metrics = await scrapeTotals(instances);
     const [consistency] = await sql<{ wallets: string; inconsistent: string; negative: string }>(
       orm,
@@ -264,7 +243,6 @@ async function main(): Promise<void> {
       await fetch(`${instances[0]!.baseUrl}/wallets/${hotWallet.id}/reconciliation`, { method: 'POST' })
     ).json()) as { consistent?: boolean; storedBalance?: { amount: string } };
 
-    // ---------- relatório
     const http = summary(httpLatencies);
     const sqs = summary(sqsLatencies);
     const lag = summary(outboxLags);

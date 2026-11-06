@@ -286,7 +286,6 @@ describe('ProcessWagerTransaction', () => {
     const failingRunner: TransactionRunner = {
       run: (work) =>
         realRunner.run(async (store) => {
-          // Injeta falha na gravação da outbox, depois de saldo, transação e ledger
           const sabotaged = Object.assign(Object.create(Object.getPrototypeOf(store)), store, {
             addOutboxMessages: async () => {
               throw new Error('outbox unavailable');

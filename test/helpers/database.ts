@@ -7,7 +7,6 @@ export const TEST_DATABASE_URL = ADMIN_URL.replace(/\/[^/]+$/, `/${TEST_DATABASE
 
 export const databaseUrlFor = (name: string) => ADMIN_URL.replace(/\/[^/]+$/, `/${name}`);
 
-/** Bancos separados do de desenvolvimento: podem ter o schema recriado à vontade. */
 async function ensureDatabase(name: string): Promise<void> {
   const admin = await MikroORM.init(createMikroOrmConfig(ADMIN_URL));
   try {
@@ -29,10 +28,6 @@ export function createTestOrm(): Promise<MikroORM> {
   return createOrmFor(TEST_DATABASE_NAME);
 }
 
-/**
- * Recria o schema do zero passando pelas migrations (down até 0 e up), o que também
- * exercita a reversibilidade. Não dá para limpar com TRUNCATE: o ledger é append-only.
- */
 export async function resetDatabase(orm: MikroORM): Promise<void> {
   await orm.migrator.down({ to: 0 });
   await orm.migrator.up();

@@ -26,7 +26,6 @@ export class WageringQueryService {
       throw new WalletNotFoundError(walletId);
     }
 
-    // Busca um item a mais só para saber se existe próxima página
     const entries = await this.queries.listLedger(walletId, cursor ? decodeCursor(cursor) : undefined, pageSize + 1);
     const page = entries.slice(0, pageSize);
     const last = page.at(-1);
@@ -53,7 +52,6 @@ export class WageringQueryService {
   }
 }
 
-/** Cursor opaco: base64url de {t, i}. O cliente não deve depender do formato interno. */
 export function encodeCursor(position: LedgerPosition): string {
   return Buffer.from(JSON.stringify({ t: position.createdAt.toISOString(), i: position.id })).toString('base64url');
 }

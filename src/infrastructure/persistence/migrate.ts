@@ -2,7 +2,6 @@ import { MikroORM } from '@mikro-orm/postgresql';
 import { loadAppConfig } from '../../config/app-config';
 import { createMikroOrmConfig } from './mikro-orm.config';
 
-// CLI mínima de migrations rodando direto no Bun: `bun run migration:up` / `migration:down`
 async function main(): Promise<void> {
   const direction = process.argv[2];
   if (direction !== 'up' && direction !== 'down') {

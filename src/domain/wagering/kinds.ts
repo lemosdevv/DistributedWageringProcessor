@@ -1,5 +1,5 @@
 export enum WagerTransactionKind {
-  /** Interno: crédito de abertura da wallet. Nunca aceito de um provider. */
+  /** Nunca aceito de um provider. */
   Opening = 'OPENING',
   Bet = 'BET',
   Win = 'WIN',
@@ -21,7 +21,6 @@ export enum LedgerDirection {
   Credit = 'CREDIT',
 }
 
-/** Kinds que um provider pode submeter (API ou fila). */
 export const PROVIDER_KINDS: readonly WagerTransactionKind[] = [
   WagerTransactionKind.Bet,
   WagerTransactionKind.Win,

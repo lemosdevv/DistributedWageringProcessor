@@ -7,11 +7,10 @@ const booleanFlag = z
 
 const appConfigSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
-  // Defaults apontam para o docker-compose local, para testes e dev rodarem sem .env
   DATABASE_URL: z.string().url().default('postgres://wagering:wagering@localhost:5433/wagering'),
   SQS_ENDPOINT: z.string().url().optional().default('http://localhost:4566'),
   AWS_REGION: z.string().default('us-east-1'),
-  // Credenciais fictícias aceitas pelo LocalStack; em AWS real viriam do ambiente/IAM
+  // Credenciais fictícias aceitas pelo LocalStack
   AWS_ACCESS_KEY_ID: z.string().default('test'),
   AWS_SECRET_ACCESS_KEY: z.string().default('test'),
   SQS_WAIT_TIME_SECONDS: z.coerce.number().int().min(0).max(20).default(10),

@@ -8,7 +8,6 @@ export interface AppInstance {
   process: Subprocess;
   /** SIGKILL: morte abrupta, sem shutdown gracioso (simula crash/OOM). */
   kill(): Promise<void>;
-  /** Encerramento normal. */
   stop(): Promise<void>;
 }
 
@@ -20,7 +19,6 @@ export interface InstanceQueues {
 
 const queueName = (url: string) => url.slice(url.lastIndexOf('/') + 1);
 
-/** Sobe um processo real da aplicação (src/main.ts) com todos os papéis ligados. */
 export async function spawnInstance(
   name: string,
   port: number,
@@ -53,7 +51,6 @@ export async function spawnInstance(
       const response = await fetch(`${baseUrl}/health/ready`);
       if (response.status === 200) break;
     } catch {
-      // ainda subindo
     }
     if (child.exitCode !== null) throw new Error(`instance ${name} exited with ${child.exitCode}`);
     await Bun.sleep(200);

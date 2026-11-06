@@ -5,7 +5,6 @@ import type { WagerTransactionCommand } from '../../application/wagering/wager-t
 
 export const WAGER_MESSAGE_TYPE = 'WagerTransactionRequested';
 
-/** Envelope da fila (§10). */
 const wagerMessageSchema = z.object({
   messageId: z.string().trim().min(1).max(256),
   type: z.literal(WAGER_MESSAGE_TYPE),
@@ -19,7 +18,6 @@ export interface ParsedWagerMessage {
   command: WagerTransactionCommand;
 }
 
-/** Converte o corpo bruto da mensagem; qualquer falha aqui é erro permanente (vai para a DLQ). */
 export function parseWagerMessage(body: string | undefined): ParsedWagerMessage {
   let json: unknown;
   try {

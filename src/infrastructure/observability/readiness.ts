@@ -28,7 +28,6 @@ async function withTimeout(check: () => Promise<unknown>): Promise<DependencySta
   }
 }
 
-/** Readiness (§9): PostgreSQL e SQS alcançáveis. Liveness não depende deles. */
 export class ReadinessChecker {
   constructor(
     private readonly orm: MikroORM,

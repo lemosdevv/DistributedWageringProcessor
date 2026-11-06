@@ -2,13 +2,12 @@ import { SendMessageBatchCommand, type SQSClient } from '@aws-sdk/client-sqs';
 import type { EventPublisher, PublishOutcome } from '../../application/ports/outbox';
 import type { OutboxMessage } from '../../domain/messaging/outbox-message';
 
-// Limite do SQS por chamada de SendMessageBatch
+// Limite do SQS: no máximo 10 entradas por chamada de SendMessageBatch
 const SQS_BATCH_LIMIT = 10;
 
 /**
- * Publica na `wallet-events.fifo` (ADR-0004) em lotes de 10. MessageGroupId = aggregateId
- * preserva a ordem por agregado; MessageDeduplicationId = eventId é só otimização: a
- * garantia de idempotência para o consumidor é o eventId do envelope.
+ * MessageGroupId = aggregateId preserva a ordem por agregado; MessageDeduplicationId = eventId
+ * é só otimização: a garantia de idempotência para o consumidor é o eventId do envelope.
  *
  * Os lotes saem em sequência (não em paralelo) para que eventos do mesmo agregado
  * cheguem na ordem em que foram reivindicados.
@@ -43,7 +42,6 @@ export class SqsEventPublisher implements EventPublisher {
           outcome.failed.push({ id: chunk[Number(failure.Id)]!.id, reason: failure.Message ?? failure.Code ?? 'unknown' });
         }
       } catch (error) {
-        // Chamada inteira falhou (rede/broker fora): o lote todo volta para retry
         const reason = error instanceof Error ? error.message : String(error);
         outcome.failed.push(...chunk.map((message) => ({ id: message.id, reason })));
       }

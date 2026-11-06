@@ -30,7 +30,6 @@ export class MikroOrmWageringQueries implements WageringQueries {
   }
 
   async listLedger(walletId: string, after: LedgerPosition | undefined, limit: number): Promise<WalletLedgerEntry[]> {
-    // Keyset por (created_at, id): estável mesmo com inserções concorrentes, ao contrário de OFFSET
     const keyset = after
       ? { $or: [{ createdAt: { $gt: after.createdAt } }, { createdAt: after.createdAt, id: { $gt: after.id } }] }
       : {};
@@ -44,7 +43,6 @@ export class MikroOrmWageringQueries implements WageringQueries {
 
   ledgerSnapshot(walletId: string): Promise<LedgerSnapshot | undefined> {
     return this.orm.em.fork().transactional(async (em) => {
-      // FOR SHARE: bloqueia escritores da wallet (FOR UPDATE) só durante as duas leituras
       const record = await em.findOne(WalletSchema, { id: walletId }, { lockMode: LockMode.PESSIMISTIC_READ });
       if (!record) {
         return undefined;

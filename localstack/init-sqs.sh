@@ -1,5 +1,4 @@
 #!/bin/bash
-# Cria as filas do desafio (§10) e a fila de eventos de integração (ADR-0004).
 set -euo pipefail
 
 REGION="${AWS_DEFAULT_REGION:-us-east-1}"
@@ -12,7 +11,6 @@ DLQ_ARN=$(awslocal sqs get-queue-attributes --region "$REGION" \
   --queue-url "$(awslocal sqs get-queue-url --region "$REGION" --queue-name wager-transactions-dlq.fifo --query QueueUrl --output text)" \
   --attribute-names QueueArn --query Attributes.QueueArn --output text)
 
-# maxReceiveCount=5 e visibility de 30s: decisão registrada no plano (rodada 2)
 awslocal sqs create-queue --region "$REGION" \
   --queue-name wager-transactions.fifo \
   --attributes "{\"FifoQueue\":\"true\",\"VisibilityTimeout\":\"30\",\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"${DLQ_ARN}\\\",\\\"maxReceiveCount\\\":\\\"5\\\"}\"}"

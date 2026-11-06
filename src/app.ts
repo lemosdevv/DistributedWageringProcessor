@@ -8,7 +8,6 @@ import { requestLogging } from './interfaces/http/request-logging.middleware';
 import { STRUCTURED_LOGGER, type StructuredLogger } from './application/ports/observability';
 import { WageringModule } from './wagering.module';
 
-/** Monta a aplicação sem escutar porta: usado pelo main e pelos testes. */
 export async function createApp(config: AppConfig): Promise<INestApplication> {
   const app = await NestFactory.create(WageringModule.register(config), { logger: ['error', 'warn'] });
   const logger = app.get<StructuredLogger>(STRUCTURED_LOGGER);

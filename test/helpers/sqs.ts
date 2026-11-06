@@ -18,7 +18,6 @@ export interface TestQueues {
   dispose(): Promise<void>;
 }
 
-/** Filas FIFO exclusivas por teste (com redrive real para a DLQ), isoladas da aplicação de dev. */
 export async function createTestQueues(maxReceiveCount = 3, visibilityTimeout = 30): Promise<TestQueues> {
   const suffix = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   const { QueueUrl: dlqUrl } = await testSqs.send(
@@ -45,7 +44,6 @@ export async function createTestQueues(maxReceiveCount = 3, visibilityTimeout = 
   };
 }
 
-/** Envia no formato do §10. Mesmo messageId com outro deduplicationId simula redelivery do provider. */
 export async function sendWagerMessage(
   queueUrl: string,
   command: WagerTransactionCommand,

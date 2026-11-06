@@ -1,11 +1,5 @@
 import { EntitySchema } from '@mikro-orm/core';
 
-/*
- * Registros de persistência: espelham as tabelas e não têm regra nenhuma. O domínio
- * nunca os vê; os mappers convertem nos dois sentidos (ADR-0001). Valores monetários
- * são `decimal` em modo string: nunca passam por number.
- */
-
 export class WalletRecord {
   id!: string;
   playerId!: string;

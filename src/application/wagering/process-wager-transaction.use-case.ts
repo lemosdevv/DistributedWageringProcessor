@@ -36,7 +36,6 @@ export interface WagerResult {
   idempotentReplay: boolean;
 }
 
-// Corridas que o banco resolve (unique key / version) são repetidas: a nova tentativa vira replay
 const MAX_ATTEMPTS = 3;
 
 interface PreparedCommand {
@@ -46,11 +45,7 @@ interface PreparedCommand {
   payloadHash: string;
 }
 
-/**
- * Único caminho de processamento de uma operação de provider, usado pela API HTTP
- * e pelo consumidor SQS (§10). Inbox, transação, saldo, ledger e outbox são
- * gravados na mesma transação SQL (§6.5, §11).
- */
+/** Inbox, transação, saldo, ledger e outbox são gravados na mesma transação SQL (§6.5, §11). */
 export class ProcessWagerTransactionUseCase {
   constructor(
     private readonly transactions: TransactionRunner,
@@ -99,7 +94,6 @@ export class ProcessWagerTransactionUseCase {
         if (!retriable || attempt >= MAX_ATTEMPTS) {
           throw error;
         }
-        // Outra instância venceu a corrida pela mesma wallet/key: a nova tentativa vira replay
         this.metrics.lockConflict();
         this.metrics.retry('wager_transaction');
         this.logger.warn({ ...logContext, attempt, reason: error.name }, 'concurrent write detected, retrying');
@@ -118,7 +112,6 @@ export class ProcessWagerTransactionUseCase {
     if (ctx.inbox) {
       const delivered = await store.findInboxMessage(ctx.inbox.consumerName, ctx.inbox.messageId);
       if (delivered) {
-        // Redelivery de mensagem já confirmada: devolve o resultado original sem novo efeito
         this.metrics.duplicateDetected('inbox_redelivery');
         return this.replayOfDelivered(store, prepared, ctx);
       }
@@ -149,10 +142,7 @@ export class ProcessWagerTransactionUseCase {
     return toResult(transaction, false);
   }
 
-  /**
-   * Reprocessa uma transação em PENDING_REFERENCE (§7.1), chamado pelo worker agendado.
-   * Devolve undefined se outra instância já a resolveu.
-   */
+  /** Devolve undefined se outra instância já a resolveu. */
   async retryPendingReference(transactionId: string, correlationId: string): Promise<WagerResult | undefined> {
     for (let attempt = 1; ; attempt++) {
       try {
@@ -213,9 +203,8 @@ export class ProcessWagerTransactionUseCase {
       await store.updateWalletBalance(wallet, expectedVersion);
       await store.addLedgerEntry(outcome.ledgerEntry);
     }
-    // Uma nova espera pela referência não gera evento: ele já foi publicado na primeira vez
-    const stillWaiting = !origin.isNew && outcome.status === WagerTransactionStatus.PendingReference;
-    if (!stillWaiting) {
+    const pendingEventAlreadyPublished = !origin.isNew && outcome.status === WagerTransactionStatus.PendingReference;
+    if (!pendingEventAlreadyPublished) {
       await store.addOutboxMessages(this.eventsFor(transaction, wallet, outcome, origin, now));
     }
     return outcome;
@@ -233,7 +222,6 @@ export class ProcessWagerTransactionUseCase {
     if (!existing) {
       return undefined;
     }
-    // Mesma key com outro payload, ou a mesma operação do provider sob outra key: conflito
     if (!existing.matchesPayload(prepared.payloadHash) || existing.idempotencyKey !== ctx.idempotencyKey) {
       throw new IdempotencyConflictError(ctx.idempotencyKey);
     }
@@ -248,7 +236,6 @@ export class ProcessWagerTransactionUseCase {
   ): Promise<WagerResult> {
     this.metrics.duplicateDetected('idempotent_replay');
     if (ctx.inbox) {
-      // Mensagem nova com payload já processado (ex.: reenvio pelo provider): registra para deduplicar redeliveries
       await store.addInboxMessage(
         markedInbox(ctx.inbox.consumerName, ctx.inbox.messageId, existing.payloadHash, now),
       );
@@ -263,7 +250,6 @@ export class ProcessWagerTransactionUseCase {
   ): Promise<WagerResult> {
     const existing = await this.findExisting(store, prepared, ctx);
     if (!existing) {
-      // Inbox e transação são gravadas no mesmo commit: uma sem a outra indica inconsistência
       throw new Error(`Inbox message ${ctx.inbox?.messageId} has no matching transaction`);
     }
     return toResult(existing, true);
@@ -347,8 +333,8 @@ function prepare(command: WagerTransactionCommand): PreparedCommand {
   if (kind === WagerTransactionKind.Opening) {
     throw new InvalidPayloadError('OPENING is internal and cannot be submitted', FailureCode.InternalKindNotAllowed);
   }
-  // Hash calculado sobre o valor normalizado ("25" ≡ "25.00")
-  const payloadHash = computePayloadHash({ ...command, money: money.toJSON() });
+  const normalizedMoney = money.toJSON();
+  const payloadHash = computePayloadHash({ ...command, money: normalizedMoney });
   return { command, money, kind, payloadHash };
 }
 

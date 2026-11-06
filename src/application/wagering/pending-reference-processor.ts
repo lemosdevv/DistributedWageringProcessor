@@ -12,7 +12,6 @@ export interface PendingReferenceRepository {
   claimDue(now: Date, leaseMs: number, limit: number): Promise<string[]>;
 }
 
-/** Ciclo do worker agendado do §7.1: reprocessa cada transação vencida pelo mesmo use case. */
 export class PendingReferenceProcessor {
   constructor(
     private readonly repository: PendingReferenceRepository,
@@ -40,7 +39,6 @@ export class PendingReferenceProcessor {
           );
         }
       } catch (error) {
-        // A lease expira e a transação volta a vencer: nada se perde
         this.logger.warn(
           { correlationId, transactionId, err: error instanceof Error ? error.message : String(error) },
           'pending reference reprocessing failed',

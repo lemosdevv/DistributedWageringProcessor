@@ -6,7 +6,6 @@ export interface OutboxBacklog {
   oldestPendingAgeSeconds: number;
 }
 
-/** Métricas do §12 em formato Prometheus, expostas em GET /metrics. */
 export class PrometheusWageringMetrics implements WageringMetrics {
   readonly registry = new Registry();
 
@@ -67,7 +66,6 @@ export class PrometheusWageringMetrics implements WageringMetrics {
   constructor(backlog?: () => Promise<OutboxBacklog>) {
     collectDefaultMetrics({ register: this.registry });
     if (backlog) {
-      // Lido do banco a cada scrape: mostra lag mesmo quando nenhum publisher está rodando
       new Gauge({
         name: 'wagering_outbox_pending_messages',
         help: 'Outbox messages not yet published',

@@ -12,10 +12,6 @@ import { FailureCode } from '../../domain/wagering/failure-code';
 import { isTransientInfrastructureError } from '../../infrastructure/errors/transient-error';
 import { correlationIdOf } from './correlation-id.middleware';
 
-/**
- * Códigos de erro da API fora da taxonomia de transação (FailureCode), para que
- * todo erro HTTP tenha um código estável legível por máquina.
- */
 export enum ApiErrorCode {
   WalletAlreadyExists = 'WALLET_ALREADY_EXISTS',
   TransactionNotFound = 'TRANSACTION_NOT_FOUND',
@@ -36,11 +32,6 @@ interface Mapped {
   message: string;
 }
 
-/**
- * Mapeamento único e consistente para todos os endpoints (§9):
- * 400 payload inválido · 404 inexistente · 409 conflito · 503 falha transitória · 500 inesperado.
- * (422 e 202 são resultados de negócio e saem do controller, não daqui.)
- */
 export function mapError(error: unknown): Mapped {
   if (error instanceof IdempotencyConflictError || error instanceof WalletAlreadyExistsError) {
     const code = error instanceof WalletAlreadyExistsError ? ApiErrorCode.WalletAlreadyExists : error.failureCode;
@@ -60,7 +51,6 @@ export function mapError(error: unknown): Mapped {
   }
   if (error instanceof HttpException) {
     const status = error.getStatus();
-    // Ex.: JSON malformado (400) ou rota inexistente (404) detectados pelo próprio Nest/Express
     if (status === 404) return { status, code: ApiErrorCode.NotFound, message: error.message };
     if (status >= 400 && status < 500) return { status: 400, code: FailureCode.InvalidPayload, message: error.message };
   }

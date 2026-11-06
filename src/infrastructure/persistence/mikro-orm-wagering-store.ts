@@ -31,12 +31,6 @@ import {
   WalletSchema,
 } from './records';
 
-/*
- * Escritas usam em.insert/nativeUpdate (SQL imediato) em vez de persist+flush:
- * a ordem dos comandos fica determinística (wallet → transação → ledger → outbox),
- * respeitando as FKs, e o UPDATE da wallet pode ser condicionado à version.
- * Leituras passam pelo EntityManager com o LockMode explícito quando necessário.
- */
 export class MikroOrmWageringStore implements WageringStore {
   constructor(private readonly em: EntityManager) {}
 
@@ -126,10 +120,8 @@ export class MikroOrmTransactionRunner implements TransactionRunner {
 
   async run<T>(work: (store: WageringStore) => Promise<T>): Promise<T> {
     try {
-      // fork: cada operação tem seu próprio EntityManager (identity map isolado por requisição)
       return await this.orm.em.fork().transactional((em) => work(new MikroOrmWageringStore(em)));
     } catch (error) {
-      // Traduz a exceção do ORM para a porta: a aplicação não conhece o MikroORM
       if (error instanceof UniqueConstraintViolationException) {
         throw new DuplicateWriteError(constraintOf(error), error);
       }

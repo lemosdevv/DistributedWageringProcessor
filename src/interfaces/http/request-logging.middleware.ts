@@ -2,7 +2,6 @@ import type { NextFunction, Request, Response } from 'express';
 import type { StructuredLogger } from '../../application/ports/observability';
 import { correlationIdOf } from './correlation-id.middleware';
 
-/** Uma linha por requisição: rota, status e duração. Nunca corpo nem headers (dados financeiros/chaves). */
 export function requestLogging(logger: StructuredLogger) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const startedAt = performance.now();

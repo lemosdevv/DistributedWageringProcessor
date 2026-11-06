@@ -13,7 +13,6 @@ export interface WalletState {
   updatedAt: Date;
 }
 
-/** Dados para gerar o lançamento que acompanha uma movimentação de saldo. */
 export interface BalanceMovement {
   money: Money;
   transactionId: string;
@@ -47,10 +46,7 @@ export class Wallet {
     private _updatedAt: Date,
   ) {}
 
-  /**
-   * Abre a wallet já com o saldo inicial e version 1 (contrato do §9). O lançamento
-   * de abertura parte de zero para que o ledger reconstrua exatamente o saldo.
-   */
+  /** Abre a wallet já com o saldo inicial e version 1 (contrato do §9). */
   static open(props: OpenWalletProps): OpenedWallet {
     if (props.initialBalance.isNegative()) {
       throw new InvalidAmountError('Initial balance cannot be negative');
@@ -74,7 +70,6 @@ export class Wallet {
     return { wallet, openingEntry };
   }
 
-  /** Reconstrução a partir da persistência: não revalida transições. */
   static rehydrate(state: WalletState): Wallet {
     return new Wallet(
       state.id,
@@ -117,7 +112,6 @@ export class Wallet {
     return this.apply(LedgerDirection.Credit, movement);
   }
 
-  // Saldo e lançamento nascem juntos: não existe caminho que altere um sem o outro
   private apply(direction: LedgerDirection, movement: BalanceMovement): WalletLedgerEntry {
     const balanceBefore = this._balance;
     const balanceAfter =

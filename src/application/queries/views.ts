@@ -16,7 +16,6 @@ export interface LedgerEntryView {
 
 export interface LedgerPage {
   items: LedgerEntryView[];
-  /** Cursor opaco para a próxima página; null quando não há mais lançamentos. */
   nextCursor: string | null;
 }
 

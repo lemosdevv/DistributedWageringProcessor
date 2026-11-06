@@ -22,7 +22,6 @@ interface WagerTransactionIdentity {
   gameId: string;
   kind: WagerTransactionKind;
   money: Money;
-  /** id no provider, não o id interno */
   referenceExternalTransactionId: string | undefined;
   createdAt: Date;
 }
@@ -47,25 +46,13 @@ export interface WagerTransactionState extends WagerTransactionIdentity {
   nextReferenceAttemptAt: Date | undefined;
 }
 
-/**
- * Espera pela referência ausente (§7.1): até 10 reprocessamentos com backoff exponencial
- * de base 2s e teto de 5 min (≈ 18,5 min no total). Cobre atrasos normais de entrega
- * sem deixar a transação pendurada por horas.
- */
 export const REFERENCE_RETRY_POLICY: BackoffPolicy = { baseMs: 2_000, capMs: 300_000 };
 export const MAX_REFERENCE_ATTEMPTS = 10;
 
-// Abertura não vem de provider: identificadores sintéticos e determinísticos por wallet
 const OPENING_PROVIDER_ID = 'internal';
 
 const REFERENCE_REQUIRED: readonly WagerTransactionKind[] = [WagerTransactionKind.Refund, WagerTransactionKind.Rollback];
 
-/**
- * Transições válidas:
- *   PENDING           → PROCESSED | REJECTED | FAILED | PENDING_REFERENCE
- *   PENDING_REFERENCE → PROCESSED | REJECTED | FAILED | PENDING_REFERENCE (nova tentativa)
- *   PROCESSED, REJECTED, FAILED → (terminais)
- */
 export class WagerTransaction {
   private constructor(
     public readonly id: string,
@@ -90,7 +77,6 @@ export class WagerTransaction {
     private _nextReferenceAttemptAt?: Date,
   ) {}
 
-  /** Nasce em PENDING. Valida o kind e a exigência de referência. */
   static create(props: CreateWagerTransactionProps): WagerTransaction {
     if (props.kind === WagerTransactionKind.Opening) {
       throw new InvalidWagerTransactionError(
@@ -104,7 +90,6 @@ export class WagerTransaction {
         `${props.kind} requires referenceExternalTransactionId`,
       );
     }
-    // LOSS registra resultado sem mover saldo, então aceita valor zero; os demais movem saldo
     const allowsZero = props.kind === WagerTransactionKind.Loss;
     if (props.money.isNegative() || (!allowsZero && props.money.isZero())) {
       throw new InvalidAmountError(`${props.kind} amount must be positive`);
@@ -112,7 +97,6 @@ export class WagerTransaction {
     return WagerTransaction.fromIdentity(props);
   }
 
-  /** Transação interna de abertura de wallet (§9), já criada como PROCESSED. */
   static createOpening(props: CreateOpeningTransactionProps): WagerTransaction {
     const externalId = `opening:${props.walletId}`;
     const transaction = WagerTransaction.fromIdentity({
@@ -134,7 +118,6 @@ export class WagerTransaction {
     return transaction;
   }
 
-  /** Reconstrução a partir da persistência: não revalida transições. */
   static rehydrate(state: WagerTransactionState): WagerTransaction {
     return new WagerTransaction(
       state.id,
@@ -195,12 +178,9 @@ export class WagerTransaction {
     return this._processedAt;
   }
 
-  /** Saldo observado no momento em que a transação terminou (devolvido nos replays). */
   get resultingBalance(): Money | undefined {
     return this._resultingBalance;
   }
-
-  // ---- transições
 
   markProcessed(referenceTransactionId: string | undefined, at: Date, resultingBalance: Money): void {
     this.assertNotTerminal(WagerTransactionStatus.Processed);
@@ -242,8 +222,6 @@ export class WagerTransaction {
     this._processedAt = at;
   }
 
-  // ---- consultas de domínio
-
   get referenceAttempts(): number {
     return this._referenceAttempts;
   }
@@ -252,7 +230,6 @@ export class WagerTransaction {
     return this._nextReferenceAttemptAt;
   }
 
-  /** Ainda pode aguardar a referência, ou esta é a tentativa que esgota o limite? */
   canKeepWaitingForReference(): boolean {
     if (this._status !== WagerTransactionStatus.PendingReference) {
       return true;
@@ -280,7 +257,6 @@ export class WagerTransaction {
     return this.payloadHash === payloadHash;
   }
 
-  /** Direção do lançamento; ROLLBACK é o inverso da direção da referência. */
   ledgerDirectionFor(reference?: WagerTransaction): LedgerDirection {
     switch (this.kind) {
       case WagerTransactionKind.Bet:

@@ -1,9 +1,6 @@
 import { Migration } from '@mikro-orm/migrations';
 
-/**
- * Schema inicial. As garantias de unicidade, imutabilidade e não-negatividade (§5.9)
- * vivem aqui, no banco, e não só no código de aplicação.
- */
+// O §5.9 exige que unicidade, imutabilidade e não-negatividade sejam garantidas pelo banco, não só pelo código
 export class InitialSchema20261105000001 extends Migration {
   override name = '20261105000001-initial-schema';
 
@@ -103,10 +100,8 @@ export class InitialSchema20261105000001 extends Migration {
         )
       );
     `);
-    // Paginação por cursor estável (created_at, id)
     this.addSql(`create index wallet_ledger_entries_wallet_cursor on wallet_ledger_entries (wallet_id, created_at, id);`);
 
-    // Imutabilidade estrutural do ledger: UPDATE, DELETE e TRUNCATE são recusados pelo banco
     this.addSql(`
       create function wallet_ledger_entries_reject_mutation() returns trigger
       language plpgsql as $$

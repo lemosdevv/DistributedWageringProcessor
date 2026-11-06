@@ -12,7 +12,6 @@ import { AuthGuard } from './auth/auth.guard';
 import { correlationIdOf } from './correlation-id.middleware';
 import { idempotencyKeySchema, parseOrThrow, uuidSchema, wagerTransactionSchema } from './validation';
 
-/** Status HTTP por resultado de negócio; o mesmo vale para o replay da mesma operação. */
 const STATUS_BY_RESULT: Readonly<Record<WagerTransactionStatus, number>> = {
   [WagerTransactionStatus.Processed]: 200,
   [WagerTransactionStatus.Rejected]: 422,

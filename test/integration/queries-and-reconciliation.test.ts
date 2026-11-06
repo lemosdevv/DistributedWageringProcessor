@@ -71,7 +71,6 @@ describe('queries', () => {
       pages++;
     } while (cursor);
 
-    // Abertura (100.00) + 6 apostas, em ordem de criação
     expect(seen).toEqual(['100.00', '1.00', '2.00', '3.00', '4.00', '5.00', '6.00']);
     expect(pages).toBe(3);
   });
@@ -123,7 +122,6 @@ describe('reconciliation', () => {
 
   test('a divergence is flagged, logged and counted, never silently corrected', async () => {
     await bet('25.00');
-    // Simula corrupção fora do fluxo normal (ex.: UPDATE manual em produção)
     await sql(orm, 'update wallets set balance_amount = 80.00 where id = ?', [walletId]);
 
     const observers = recordingObservers();

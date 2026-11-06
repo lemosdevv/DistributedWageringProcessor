@@ -16,9 +16,8 @@ export interface PublishBatchResult {
 }
 
 /**
- * Publica eventos da outbox depois do commit (§11). Seguro com N publishers:
- * cada mensagem é reivindicada por um só; se ele morrer antes de marcar como
- * publicada, a lease expira e outro publica de novo (at-least-once, deduplicável pelo eventId).
+ * Seguro com N publishers: cada mensagem é reivindicada por um só; se ele morrer antes de
+ * marcar como publicada, a lease expira e outro publica de novo (at-least-once, deduplicável pelo eventId).
  */
 export class OutboxPublisher {
   constructor(
@@ -51,7 +50,6 @@ export class OutboxPublisher {
       message.markPublished(now);
       this.metrics.outboxLag((now.getTime() - message.occurredAt.getTime()) / 1000);
     }
-    // Só marca depois de o broker aceitar: se o processo cair aqui, a lease expira e republica
     await this.outbox.markPublished(published);
 
     const failures = new Map(outcome.failed.map((failure) => [failure.id, failure.reason]));

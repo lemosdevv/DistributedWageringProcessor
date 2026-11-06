@@ -7,7 +7,6 @@ export interface IntegrationEventProps<T> {
   data: T;
 }
 
-/** Metadados comuns a todo evento gerado dentro de uma operação. */
 export interface EventContext {
   eventId: string;
   correlationId: string;
@@ -43,11 +42,9 @@ export abstract class IntegrationEvent<T> {
     this.correlationId = props.correlationId;
     this.causationId = props.causationId;
     this.occurredAt = props.occurredAt;
-    // Congela o payload: o evento é um fato, não pode mudar depois de criado
     this.data = Object.freeze({ ...props.data });
   }
 
-  /** Envelope serializado gravado no payload da outbox. */
   toJSON(): IntegrationEventEnvelope<T> {
     return {
       eventId: this.eventId,

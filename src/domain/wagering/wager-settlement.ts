@@ -8,9 +8,7 @@ export interface SettlementInput {
   transaction: WagerTransaction;
   /** Wallet já bloqueada pelo chamador (lock por wallet, ADR-0002). */
   wallet: Wallet;
-  /** Resultado da busca por (providerId, referenceExternalTransactionId); undefined = não existe ainda. */
   reference: WagerTransaction | undefined;
-  /** Já existe reversão PROCESSED do mesmo kind para essa referência. */
   referenceAlreadyReversed: boolean;
   ledgerEntryId: string;
   at: Date;
@@ -33,8 +31,7 @@ const ALLOWED_REFERENCE_KINDS: Readonly<Record<WagerTransactionKind, readonly Wa
 
 /**
  * Aplica as regras de negócio do §7 a uma transação pendente, mutando wallet e
- * transação de forma consistente. É o único lugar que decide o efeito financeiro;
- * o use case só carrega o estado, chama esta função e persiste o resultado.
+ * transação de forma consistente.
  */
 export function settleWagerTransaction(input: SettlementInput): SettlementOutcome {
   const { transaction, wallet, at } = input;
@@ -102,7 +99,6 @@ function findRejection(input: SettlementInput): FailureCode | 'PENDING_REFERENCE
     return FailureCode.ReferenceMismatch;
   }
   if (!reference.isTerminal()) {
-    // A referência existe mas ainda espera a própria referência: aguardar também
     return 'PENDING_REFERENCE';
   }
   if (reference.status !== WagerTransactionStatus.Processed) {

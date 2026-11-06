@@ -43,7 +43,6 @@ export interface WagerTransactionProcessedData extends TransactionIdentityData {
   processedAt: string;
 }
 
-/** Qualquer transação aplicada, inclusive LOSS. */
 export class WagerTransactionProcessed extends IntegrationEvent<WagerTransactionProcessedData> {
   readonly eventType = 'WagerTransactionProcessed';
   readonly version = 1;
@@ -67,7 +66,6 @@ export interface WagerTransactionRejectedData extends TransactionIdentityData {
   referenceExternalTransactionId: string | null;
 }
 
-/** Transação rejeitada por regra de negócio. */
 export class WagerTransactionRejected extends IntegrationEvent<WagerTransactionRejectedData> {
   readonly eventType = 'WagerTransactionRejected';
   readonly version = 1;
@@ -89,7 +87,6 @@ export interface WagerTransactionPendingReferenceData extends TransactionIdentit
   referenceExternalTransactionId: string;
 }
 
-/** Referência ausente: a transação aguarda reprocessamento. */
 export class WagerTransactionPendingReference extends IntegrationEvent<WagerTransactionPendingReferenceData> {
   readonly eventType = 'WagerTransactionPendingReference';
   readonly version = 1;

@@ -172,7 +172,7 @@ Cada código vem com a ação esperada do provedor ([failure-code.ts](src/domain
 4. **Nova busca pela key, já com o lock.** Uma duplicata concorrente que acabou de commitar aparece aqui e vira replay, em vez de tentar gravar de novo.
 5. Resolve a referência, aplica `settleWagerTransaction` e grava. O `UPDATE` da wallet é condicionado à versão lida (`WHERE version = ?`), uma defesa extra caso alguém escreva sem o lock.
 
-Corridas que o banco resolve viram erros das portas (`DuplicateWriteError` para unique violation, `ConcurrencyConflictError` para a versão desatualizada) e a operação é repetida até 3 vezes; a nova tentativa vira replay. Se ainda assim falhar, a API responde 503 (transitório) e a fila faz retry.
+Corridas que o banco resolve viram erros das portas (`DuplicateWriteError` para unique violation, `ConcurrencyConflictError` para a versão desatualizada) e a operação é repetida até 3 vezes. Depois de uma `DuplicateWriteError`, a nova tentativa encontra a gravação concorrente e vira replay; depois de uma `ConcurrencyConflictError`, ela relê a wallet e reprocessa a operação. Se ainda assim falhar, a API responde 503 (transitório) e a fila faz retry.
 
 **Por que não lock otimista:** numa wallet muito disputada, o cenário que o §8 testa, ele gera muitos conflitos e retries esgotados. **Por que não só `UPDATE … WHERE balance >= x`:** resolve o débito, mas não dá uma leitura consistente da referência, da idempotência e do `balanceBefore`/`balanceAfter` do ledger na mesma decisão.
 
@@ -182,7 +182,7 @@ A ordenação e a deduplicação do SQS FIFO são **otimizações**: os testes m
 
 **ORM:** MikroORM com `EntitySchema` sobre classes de registro de persistência, e mappers que convertem para o domínio via `rehydrate` ([ADR-0001](docs/adr/0001-mikro-orm-with-entity-schema.md)).
 
-**Estratégia transacional:** cada operação usa `em.fork().transactional()`. Dentro dela, as escritas são `em.insert`/`nativeUpdate` explícitos, em vez de `persist` + `flush`. Isso deixa a ordem dos comandos determinística (wallet → transação → ledger → outbox), respeitando as chaves estrangeiras compostas, e permite o `UPDATE` condicionado à versão. As leituras usam o `EntityManager` com `LockMode.PESSIMISTIC_WRITE` quando precisam de lock.
+**Estratégia transacional:** cada operação usa `em.fork().transactional()`. Dentro dela, as escritas são `em.insert`/`nativeUpdate` explícitos, em vez de `persist` + `flush`. Isso deixa a ordem dos comandos determinística (transação → saldo da wallet → ledger → outbox → inbox), respeitando as chaves estrangeiras compostas, e permite o `UPDATE` condicionado à versão. As leituras usam o `EntityManager` com `LockMode.PESSIMISTIC_WRITE` quando precisam de lock.
 
 **Migrations:** escritas à mão, versionadas e reversíveis (`up`/`down`). Um teste faz up → down → up, e o helper de teste recria o schema por esse mesmo caminho a cada teste.
 

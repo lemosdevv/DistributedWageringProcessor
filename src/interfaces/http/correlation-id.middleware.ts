@@ -7,7 +7,6 @@ export interface CorrelatedRequest extends Request {
   correlationId: string;
 }
 
-/** Propaga o correlationId do cliente (se válido) ou gera um novo; devolvido no header da resposta. */
 export class CorrelationIdMiddleware {
   use = (req: Request, res: Response, next: NextFunction): void => {
     const incoming = req.header(CORRELATION_HEADER);

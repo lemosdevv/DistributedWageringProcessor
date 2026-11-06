@@ -8,7 +8,6 @@ import { SqsWagerConsumer, type WagerProcessor } from './sqs-wager-consumer';
 
 export const WAGER_CONSUMER_NAME = 'wager-transactions-consumer';
 
-/** Liga o ciclo de vida do consumidor ao da aplicação Nest (start no boot, stop no SIGTERM). */
 export class SqsConsumerHost implements OnApplicationBootstrap, BeforeApplicationShutdown {
   private consumer: SqsWagerConsumer | undefined;
 

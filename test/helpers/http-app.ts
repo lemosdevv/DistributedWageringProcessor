@@ -9,7 +9,6 @@ export interface RunningApp {
   close(): Promise<void>;
 }
 
-/** Sobe a aplicação real (Nest + Express) numa porta livre, só com o papel HTTP. */
 export async function startHttpApp(overrides: Partial<Record<keyof AppConfig, string>> = {}): Promise<RunningApp> {
   const config = loadAppConfig({
     DATABASE_URL: TEST_DATABASE_URL,
